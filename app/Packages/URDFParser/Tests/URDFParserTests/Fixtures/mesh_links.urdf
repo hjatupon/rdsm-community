@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Tests package:// mesh URI parsing -->
+<robot name="mesh_robot">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/base.dae"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="sensor_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/lidar.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="sensor_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="sensor_link"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+  </joint>
+</robot>

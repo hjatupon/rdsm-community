@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Included by xacro_include_parent.urdf.xacro — do NOT parse standalone -->
+<link name="sensor_link">
+  <visual>
+    <geometry>
+      <sphere radius="0.05"/>
+    </geometry>
+  </visual>
+</link>
+<joint name="sensor_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="sensor_link"/>
+  <origin xyz="0 0 0.25" rpy="0 0 0"/>
+</joint>

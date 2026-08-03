@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Demo recording — large MCAP bag (~200MB), generated locally via scripts/record-demo.sh
+demo-recording/
+
+# Generated bag files from robot recording
+bags/

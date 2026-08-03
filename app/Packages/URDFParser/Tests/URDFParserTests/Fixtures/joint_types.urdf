@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- Tests all 6 URDF joint types -->
+<robot name="joint_types_bot">
+  <link name="world"/>
+  <link name="base"/>
+  <link name="link_rev"/>
+  <link name="link_cont"/>
+  <link name="link_pris"/>
+  <link name="link_fixed"/>
+  <link name="link_float"/>
+  <link name="link_planar"/>
+
+  <joint name="j_revolute" type="revolute">
+    <parent link="world"/>
+    <child link="base"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="j_continuous" type="continuous">
+    <parent link="base"/>
+    <child link="link_rev"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <joint name="j_prismatic" type="prismatic">
+    <parent link="link_rev"/>
+    <child link="link_cont"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="j_fixed" type="fixed">
+    <parent link="link_cont"/>
+    <child link="link_pris"/>
+  </joint>
+  <joint name="j_floating" type="floating">
+    <parent link="link_pris"/>
+    <child link="link_fixed"/>
+  </joint>
+  <joint name="j_planar" type="planar">
+    <parent link="link_fixed"/>
+    <child link="link_float"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>

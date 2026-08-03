@@ -1,0 +1,43 @@
+# ROS2 Studio — local test environment
+#
+# Brings up a live ROS2 (Jazzy) stack the Mac app connects to over the network,
+# honoring the doctrine: Linux is the engine, Mac is the cockpit. The Mac never
+# talks to hardware — it connects to foxglove_bridge at ws://localhost:8765.
+#
+#   docker compose up -d      # start (first boot installs packages — give it ~90s)
+#   docker compose ps         # check
+#   docker compose logs -f    # watch
+#   docker compose down       # stop
+#
+# Everything runs in ONE container on purpose: turtlesim, the cmd_vel driver, and
+# foxglove_bridge all share localhost, so DDS discovery "just works" without
+# multicast across the Docker bridge. Only port 8765 is published to the Mac.
+# (Docker Desktop runs the daemon in a Linux VM, so `network_mode: host` would NOT
+# expose the bridge to the Mac's localhost — a published port is the portable fix.)
+#
+# Verify topics once up (via the app, or `docker compose exec ros ros2 topic list`):
+#   /turtle1/pose      turtlesim/msg/Pose
+#   /turtle1/cmd_vel   geometry_msgs/msg/Twist
+#   /rosout            rcl_interfaces/msg/Log
+
+name: ros2studio-testenv
+
+services:
+  ros:
+    image: ros:jazzy
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        apt-get update
+        apt-get install -y ros-jazzy-turtlesim ros-jazzy-foxglove-bridge
+        source /opt/ros/jazzy/setup.bash
+        QT_QPA_PLATFORM=offscreen ros2 run turtlesim turtlesim_node &
+        ( sleep 8 && ros2 topic pub --rate 10 /turtle1/cmd_vel geometry_msgs/msg/Twist '{linear: {x: 1.0}, angular: {z: 0.6}}' ) &
+        exec ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 -p address:=0.0.0.0 -p send_buffer_limit:=10000000
+    environment:
+      - ROS_DOMAIN_ID=0
+    ports:
+      - "8765:8765"
+    restart: unless-stopped

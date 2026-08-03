@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<robot name="xacro_prop_bot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="wheel_radius" value="0.1"/>
+  <xacro:property name="wheel_width" value="0.05"/>
+
+  <link name="base_link"/>
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <origin xyz="0 0.15 0" rpy="1.5707963 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="0 -0.15 0" rpy="1.5707963 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>

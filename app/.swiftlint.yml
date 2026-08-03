@@ -1,0 +1,39 @@
+included:
+  - Packages
+
+excluded:
+  - .build
+  - "**/Demo/**"
+
+opt_in_rules:
+  - explicit_init
+  - force_unwrapping
+  - implicit_return
+  - sorted_imports
+  - vertical_whitespace_closing_braces
+
+disabled_rules:
+  - todo
+
+# Tech-debt rules from 08-tech-stack §20
+custom_rules:
+  no_print:
+    name: "No print() in production code"
+    regex: '^\s*print\('
+    message: "Use os.Logger (subsystem: app.ros2studio) instead of print()"
+    severity: error
+    excluded_paths:
+      - "**/Demo/**"
+
+force_unwrapping:
+  severity: error
+
+line_length:
+  warning: 120
+  error: 160
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 300
+  error: 400

@@ -1,0 +1,36 @@
+# ROS2 Studio — local test environment
+#
+# Brings up a live ROS2 (Jazzy) stack the Mac app connects to over the network.
+# Uses rosbridge_suite (port 9090) — replaces foxglove_bridge.
+#
+#   docker compose up -d      # start (first boot installs packages — ~90s)
+#   docker compose ps         # check
+#   docker compose logs -f    # watch
+#   docker compose down       # stop
+#
+# Verify topics once up:
+#   /turtle1/pose      turtlesim/msg/Pose
+#   /turtle1/cmd_vel   geometry_msgs/msg/Twist
+#   /rosout            rcl_interfaces/msg/Log
+
+name: ros2studio-testenv
+
+services:
+  ros:
+    image: ros:jazzy
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        apt-get update -qq
+        apt-get install -y ros-jazzy-turtlesim ros-jazzy-rosbridge-suite
+        source /opt/ros/jazzy/setup.bash
+        QT_QPA_PLATFORM=offscreen ros2 run turtlesim turtlesim_node &
+        ( sleep 8 && ros2 topic pub --rate 10 /turtle1/cmd_vel geometry_msgs/msg/Twist '{linear: {x: 1.0}, angular: {z: 0.6}}' ) &
+        exec ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 address:=0.0.0.0
+    environment:
+      - ROS_DOMAIN_ID=0
+    ports:
+      - "9090:9090"
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+ROS2 Studio Live Simulation Bot
+
+Copyright (c) 2026 ROS2 Studio
+Licensed under the Apache License, Version 2.0.
+
+This simulation uses the following open-source tools:
+- ROS2 Jazzy  — Apache License 2.0
+- Gazebo Harmonic — Apache License 2.0
+- TurtleBot3   — Apache License 2.0
+- Nav2          — Apache License 2.0
+- slam_toolbox  — LGPL 2.1
+- foxglove_bridge — MIT License
+
+None of these tools are redistributed by ROS2 Studio.

@@ -1,0 +1,31 @@
+services:
+  sim:
+    build: .
+    platform: linux/amd64
+    # Auto-restart if Gazebo crashes (entrypoint exits with code 1 when a critical
+    # process dies, triggering this policy to relaunch the full simulation).
+    restart: unless-stopped
+    # Gazebo needs shared memory for sensor data exchange
+    shm_size: 4gb
+    ports:
+      # rosbridge_server WebSocket — connect Mac app to ws://localhost:9090
+      - "9090:9090"
+      # HTTP file server for bag downloads — Mac app downloads bags via http://localhost:9091/download/<name>
+      - "9091:9091"
+    environment:
+      - TURTLEBOT3_MODEL=waffle_pi
+      - ROS_DOMAIN_ID=0
+      - DISPLAY=:99
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - MESA_GL_VERSION_OVERRIDE=3.3
+    # Prevents Gazebo from OOM-killing itself on large maps
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    # Expose bag recording output directory to host
+    # Mount ros2_studio_recorder node for robot-side bag recording
+    volumes:
+      - ./bags:/sim-bot/bags
+      - ../ros2_studio_recorder:/sim-bot/ros2_studio_recorder
+

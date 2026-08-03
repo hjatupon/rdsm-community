@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- Tests joint origin xyz and rpy parsing -->
+<robot name="rpy_bot">
+  <link name="base_link"/>
+  <link name="rotated_link"/>
+  <joint name="rpy_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="rotated_link"/>
+    <origin xyz="1.0 2.0 3.0" rpy="1.5707963 0 0"/>
+  </joint>
+</robot>
