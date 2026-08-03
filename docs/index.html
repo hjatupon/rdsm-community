@@ -1,0 +1,759 @@
+<title>RDSM — Robotics Developer Studio for Mac</title>
+
+<style>
+  :root {
+    --ground: #0E1116;
+    --panel: #151A21;
+    --panel-2: #1A2029;
+    --line: #232A33;
+    --ink: #E6EDF3;
+    --muted: #8B98A6;
+    --accent: #2EB9B0;
+    --accent-soft: rgba(46, 185, 176, 0.14);
+    --accent-line: rgba(46, 185, 176, 0.38);
+    --signal: #E8A33D;
+    --signal-soft: rgba(232, 163, 61, 0.14);
+    --shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+
+    --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+    --measure: 66ch;
+    --gutter: clamp(20px, 5vw, 56px);
+    --maxw: 1120px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #F5F7F8;
+      --panel: #FFFFFF;
+      --panel-2: #EFF3F4;
+      --line: #DCE3E6;
+      --ink: #101519;
+      --muted: #5A6873;
+      --accent: #0F7B75;
+      --accent-soft: rgba(15, 123, 117, 0.10);
+      --accent-line: rgba(15, 123, 117, 0.30);
+      --signal: #9C6416;
+      --signal-soft: rgba(156, 100, 22, 0.10);
+      --shadow: 0 1px 2px rgba(16,21,25,0.04);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground: #F5F7F8;
+    --panel: #FFFFFF;
+    --panel-2: #EFF3F4;
+    --line: #DCE3E6;
+    --ink: #101519;
+    --muted: #5A6873;
+    --accent: #0F7B75;
+    --accent-soft: rgba(15, 123, 117, 0.10);
+    --accent-line: rgba(15, 123, 117, 0.30);
+    --signal: #9C6416;
+    --signal-soft: rgba(156, 100, 22, 0.10);
+    --shadow: 0 1px 2px rgba(16,21,25,0.04);
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0E1116;
+    --panel: #151A21;
+    --panel-2: #1A2029;
+    --line: #232A33;
+    --ink: #E6EDF3;
+    --muted: #8B98A6;
+    --accent: #2EB9B0;
+    --accent-soft: rgba(46, 185, 176, 0.14);
+    --accent-line: rgba(46, 185, 176, 0.38);
+    --signal: #E8A33D;
+    --signal-soft: rgba(232, 163, 61, 0.14);
+    --shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+  }
+
+  .page {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--display);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+
+  a { color: inherit; }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding-block: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mark {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    text-decoration: none;
+  }
+  .mark b {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .mark span {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .navlinks {
+    display: flex;
+    gap: 26px;
+    font-size: 14px;
+  }
+  .navlinks a { color: var(--muted); text-decoration: none; }
+  .navlinks a:hover { color: var(--ink); }
+  @media (max-width: 620px) { .navlinks { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+  }
+  #sweep {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .hero-inner {
+    position: relative;
+    padding-block: clamp(64px, 12vh, 132px);
+    display: grid;
+    gap: 26px;
+    max-width: 720px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--accent-line);
+    max-width: 120px;
+  }
+  h1 {
+    font-size: clamp(38px, 6.4vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+  .lede {
+    font-size: clamp(16.5px, 2vw, 19px);
+    color: var(--muted);
+    max-width: 54ch;
+    margin: 0;
+  }
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 20px;
+    border-radius: 5px;
+    font-size: 14.5px;
+    font-weight: 550;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--ground);
+    font-weight: 650;
+  }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-ghost {
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--ink);
+  }
+  .btn-ghost:hover { border-color: var(--accent-line); }
+  .btn small {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    opacity: 0.72;
+    text-transform: uppercase;
+  }
+  .srcline {
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .srcline a {
+    color: var(--ink);
+    text-underline-offset: 3px;
+    text-decoration-color: var(--accent-line);
+  }
+
+  /* spec strip */
+  .specs {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .specs div {
+    padding: 13px 22px 13px 0;
+    margin-right: 22px;
+    border-right: 1px solid var(--line);
+  }
+  .specs div:last-child { border-right: 0; }
+  .specs b { color: var(--ink); font-weight: 550; }
+
+  /* ---------- sections ---------- */
+  section { padding-block: clamp(56px, 9vh, 96px); }
+  .sec-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  h2 {
+    font-size: clamp(25px, 3.4vw, 34px);
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    font-weight: 650;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .sec-intro {
+    color: var(--muted);
+    max-width: var(--measure);
+    margin: 0;
+  }
+
+  /* feature grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-top: 38px;
+  }
+  .cell {
+    background: var(--panel);
+    padding: 24px 22px 26px;
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    box-shadow: var(--shadow);
+  }
+  .cell h3 {
+    font-size: 15.5px;
+    font-weight: 620;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .cell p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .cell .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ---------- editions ---------- */
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    margin-top: 38px;
+    background: var(--panel);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 640px;
+  }
+  thead th {
+    text-align: left;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: bottom;
+    background: var(--panel-2);
+  }
+  thead th:first-child { width: 42%; }
+  .edition-name {
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    display: block;
+  }
+  .edition-meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-top: 5px;
+  }
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 9px;
+  }
+  .chip-free { background: var(--accent-soft); color: var(--accent); }
+  .chip-pro { background: var(--signal-soft); color: var(--signal); }
+  tbody th {
+    text-align: left;
+    font-weight: 450;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+  tbody td {
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child th,
+  tbody tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--accent); }
+  .no { opacity: 0.42; }
+  .rowgroup th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--panel-2);
+    padding-block: 9px;
+  }
+  .rowgroup td { background: var(--panel-2); }
+
+  /* ---------- build ---------- */
+  .build {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+  }
+  @media (max-width: 780px) { .build { grid-template-columns: 1fr; } }
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 26px 0 0;
+    display: grid;
+    gap: 16px;
+  }
+  .steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+  .steps li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    padding-top: 3px;
+    letter-spacing: 0.06em;
+  }
+  .steps b { color: var(--ink); font-weight: 550; }
+  pre {
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.85;
+    color: var(--ink);
+  }
+  pre .c { color: var(--muted); }
+  pre .p { color: var(--accent); }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding-block: 34px 44px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px 40px;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+  .footlinks { display: flex; gap: 22px; flex-wrap: wrap; }
+  .legal { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="wrap masthead">
+    <a class="mark" href="#top">
+      <b>RDSM</b>
+      <span>Robotics Developer Studio for Mac</span>
+    </a>
+    <nav class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#editions">Editions</a>
+      <a href="#source">Build from source</a>
+    </nav>
+  </header>
+
+  <div class="hero" id="top">
+    <canvas id="sweep" aria-hidden="true"></canvas>
+    <div class="wrap hero-inner">
+      <p class="eyebrow">Native macOS · ROS 2</p>
+      <h1>Your Mac is the cockpit. <em>The robot is the engine.</em></h1>
+      <p class="lede">
+        RDSM is a native macOS cockpit for ROS 2 — a Metal-rendered 3D viewport, topic
+        inspection, TF, and logs, talking to your robot over rosbridge. No ROS install
+        on your Mac. No Electron.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/hjatupon/rdsm-community/releases">
+          Download Community <small>Free</small>
+        </a>
+        <a class="btn btn-ghost" href="https://apps.apple.com/th/app/ros2-studio/id6792280929?mt=12">
+          Get RDSM Pro <small>App Store</small>
+        </a>
+      </div>
+      <p class="srcline">
+        Prefer to build it yourself? The core is open source —
+        <a href="https://github.com/hjatupon/rdsm-community">github.com/hjatupon/rdsm-community</a>
+      </p>
+    </div>
+    <div class="wrap specs">
+      <div><b>macOS 15</b> Sequoia or later</div>
+      <div><b>Apple Silicon</b> + Intel</div>
+      <div><b>rosbridge</b> ws://host:9090</div>
+      <div><b>Metal 4</b> renderer</div>
+    </div>
+  </div>
+
+  <section class="wrap" id="features">
+    <p class="sec-label">What you get, free</p>
+    <h2>A real cockpit, not a viewer.</h2>
+    <p class="sec-intro">
+      Everything below ships in RDSM Community — open source under Apache 2.0, and
+      complete enough to debug a robot with.
+    </p>
+
+    <div class="grid">
+      <div class="cell">
+        <span class="tag">3D Viewport</span>
+        <h3>14 display layers</h3>
+        <p>LaserScan, PointCloud2, OccupancyGrid, Octomap, Odometry, MarkerArray, Path,
+           TF frames, robot model, maps and more — composited by a Metal 4 renderer.</p>
+      </div>
+      <div class="cell">
+        <span class="tag">Inspect</span>
+        <h3>Topics and raw messages</h3>
+        <p>Browse every topic by namespace, then read any message as an expandable
+           JSON tree with search, freeze, and rate throttling.</p>
+      </div>
+      <div class="cell">
+        <span class="tag">Transforms</span>
+        <h3>TF tree, text and diagram</h3>
+        <p>See the frame hierarchy, publish rates, staleness, and per-edge transforms
+           as your robot moves.</p>
+      </div>
+      <div class="cell">
+        <span class="tag">Robot model</span>
+        <h3>URDF with meshes</h3>
+        <p>Loads URDF over <code>/robot_description</code> or from disk, resolving
+           <code>package://</code> mesh paths — STL, OBJ, DAE.</p>
+      </div>
+      <div class="cell">
+        <span class="tag">Command</span>
+        <h3>Publish, goals, services</h3>
+        <p>Send String, Twist, TwistStamped or raw JSON; drop a Nav2 goal or 2D pose
+           estimate by dragging on the floor plane; browse and call any ROS 2 service.</p>
+      </div>
+      <div class="cell">
+        <span class="tag">Logs</span>
+        <h3>/rosout, filtered</h3>
+        <p>Severity filters, node and message search, auto-scroll, and a capped
+           buffer that keeps long sessions responsive.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="editions">
+    <p class="sec-label">Editions</p>
+    <h2>Community is the foundation. Pro is the workday.</h2>
+    <p class="sec-intro">
+      Two separate apps. Community is free and open source, downloaded here. Pro adds the
+      recording, replay and diagnostics tooling and is sold on the Mac App Store.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"><span class="edition-name">Capability</span></th>
+            <th scope="col">
+              <span class="chip chip-free">Open source</span>
+              <span class="edition-name">Community</span>
+              <span class="edition-meta">Free · direct download</span>
+            </th>
+            <th scope="col">
+              <span class="chip chip-pro">Paid</span>
+              <span class="edition-name">Pro</span>
+              <span class="edition-meta">Mac App Store</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="rowgroup"><th scope="row" colspan="1">Visualize</th><td></td><td></td></tr>
+          <tr><th scope="row">3D viewport · 14 layers</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Robot model (URDF + meshes)</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">TF tree — text &amp; diagram</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">TF Universe — immersive 3D diagnostics</th><td class="no">—</td><td class="yes">Included</td></tr>
+
+          <tr class="rowgroup"><th scope="row">Inspect</th><td></td><td></td></tr>
+          <tr><th scope="row">Topic browser</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Raw / JSON message inspector</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Purpose-built visualizations</th><td class="no">—</td><td class="yes">20 views</td></tr>
+          <tr><th scope="row">Time-series plotting</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">/rosout log viewer</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+
+          <tr class="rowgroup"><th scope="row">Command</th><td></td><td></td></tr>
+          <tr><th scope="row">Publish String / Twist / raw JSON</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Saved message templates</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Nav2 goal &amp; 2D pose estimate</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Service browser &amp; caller</th><td class="yes">Included</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Parameter editor, diff &amp; profiles</th><td class="no">—</td><td class="yes">Included</td></tr>
+
+          <tr class="rowgroup"><th scope="row">Record &amp; replay</th><td></td><td></td></tr>
+          <tr><th scope="row">Record live topics to MCAP</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Rosbag playback &amp; timeline</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Bookmarks &amp; annotations</th><td class="no">—</td><td class="yes">Included</td></tr>
+
+          <tr class="rowgroup"><th scope="row">Connect</th><td></td><td></td></tr>
+          <tr><th scope="row">rosbridge connection</th><td class="yes">1 robot</td><td class="yes">Multiple</td></tr>
+          <tr><th scope="row">Source code</th><td class="yes">Apache 2.0</td><td class="no">Closed</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="wrap" id="source">
+    <div class="build">
+      <div>
+        <p class="sec-label">Build from source</p>
+        <h2>Clone it, build it, change it.</h2>
+        <p class="sec-intro">
+          The Community edition is the whole app — 28 Swift packages, no private
+          dependencies. It builds with stock Xcode.
+        </p>
+        <ol class="steps">
+          <li><span><b>Install XcodeGen</b> — the project file is generated, so it never
+              conflicts in review.</span></li>
+          <li><span><b>Generate and build</b> — one command each, no workspace setup.</span></li>
+          <li><span><b>Bring up a robot</b> — a Dockerized TurtleBot3 with Nav2 and
+              rosbridge is included for testing.</span></li>
+        </ol>
+      </div>
+      <div>
+<pre><span class="c"># 1 — tooling</span>
+brew install xcodegen
+
+<span class="c"># 2 — build the app</span>
+git clone https://github.com/hjatupon/rdsm-community.git
+cd rdsm-community/app
+xcodegen generate <span class="p">--spec</span> project.yml
+xcodebuild <span class="p">-project</span> RDSMCommunity.xcodeproj \
+           <span class="p">-scheme</span> RDSMCommunity build
+
+<span class="c"># 3 — simulated robot, then connect to</span>
+<span class="c">#     ws://localhost:9090</span>
+cd ../testing/sim-bot
+docker compose up <span class="p">-d</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <footer class="wrap">
+    <span class="legal">RDSM — Robotics Developer Studio for Mac</span>
+    <div class="footlinks">
+      <a href="https://github.com/hjatupon/rdsm-community">Source</a>
+      <a href="https://github.com/hjatupon/rdsm-community/releases">Releases</a>
+      <a href="https://apps.apple.com/th/app/ros2-studio/id6792280929?mt=12">Mac App Store</a>
+      <a href="mailto:jatupon.h@icloud.com?subject=RDSM">Contact</a>
+    </div>
+    <span class="legal">Community edition · Apache License 2.0</span>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('sweep');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    function accent() {
+      var v = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+      return (v || '#2EB9B0').trim();
+    }
+    function isLight() {
+      var g = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim();
+      return g.toUpperCase().indexOf('#F') === 0;
+    }
+
+    // A LiDAR-like floor sweep: concentric returns with occasional obstacle arcs.
+    var pts = [];
+    for (var r = 0; r < 26; r++) {
+      var radius = 0.6 + r * 0.42;
+      var count = 26 + r * 3;
+      for (var i = 0; i < count; i++) {
+        var a = (i / count) * Math.PI * 2;
+        var jitter = 1 + (Math.sin(a * 7 + r) * 0.035);
+        pts.push({ a: a, r: radius * jitter, ring: r });
+      }
+    }
+
+    function resize() {
+      var rect = canvas.getBoundingClientRect();
+      w = rect.width; h = rect.height;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function draw(t) {
+      ctx.clearRect(0, 0, w, h);
+      var light = isLight();
+      var col = accent();
+      var cx = w * 0.70, cy = h * 0.62;
+      var scale = Math.min(w, h) * 0.115;
+      var tilt = 0.42;                       // flatten to a ground plane
+      var yaw = reduce ? 0.6 : t * 0.000075; // slow orbit
+      var beam = reduce ? 2.2 : (t * 0.0011) % (Math.PI * 2);
+
+      for (var i = 0; i < pts.length; i++) {
+        var p = pts[i];
+        var a = p.a + yaw;
+        var x = Math.cos(a) * p.r;
+        var z = Math.sin(a) * p.r;
+        var sx = cx + x * scale;
+        var sy = cy + z * scale * tilt;
+        if (sx < -40 || sx > w + 40 || sy < -40 || sy > h + 40) continue;
+
+        // brightness falls off with distance, lifts near the sweeping beam
+        var d = 1 - Math.min(p.r / 11.5, 1);
+        var delta = Math.abs(((p.a + yaw) % (Math.PI * 2)) - beam);
+        if (delta > Math.PI) delta = Math.PI * 2 - delta;
+        var hit = Math.max(0, 1 - delta * 1.9);
+        var alpha = (light ? 0.11 : 0.16) * d + hit * hit * (light ? 0.40 : 0.62) * d;
+        if (alpha < 0.012) continue;
+
+        var size = 1 + hit * 1.7;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = col;
+        ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      }
+
+      // origin frame: two short axes, the way a TF frame reads in the viewport
+      ctx.globalAlpha = light ? 0.30 : 0.42;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(yaw) * scale * 1.5, cy + Math.sin(yaw) * scale * 1.5 * tilt);
+      ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(yaw + Math.PI / 2) * scale * 1.5, cy + Math.sin(yaw + Math.PI / 2) * scale * 1.5 * tilt);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    var raf = null;
+    function loop(t) { draw(t); raf = requestAnimationFrame(loop); }
+
+    resize();
+    if (reduce) { draw(0); } else { raf = requestAnimationFrame(loop); }
+
+    window.addEventListener('resize', function () {
+      resize();
+      if (reduce) draw(0);
+    });
+
+    // repaint on theme flips so the accent tracks the palette
+    var mo = new MutationObserver(function () { if (reduce) draw(0); });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  })();
+</script>
