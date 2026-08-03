@@ -379,6 +379,7 @@
   tbody tr:last-child th,
   tbody tr:last-child td { border-bottom: 0; }
   .yes { color: var(--accent); }
+  .soon { color: var(--signal); }
   .no { opacity: 0.42; }
   .rowgroup th {
     font-family: var(--mono);
@@ -555,11 +556,13 @@
 
   <section class="wrap" id="editions">
     <p class="sec-label">Editions</p>
-    <h2>Community is the foundation. Pro is the workday.</h2>
+    <h2>Same app today. Different licence.</h2>
     <p class="sec-intro">
-      Two separate apps. Community is free and open source, downloaded here. Pro adds the
-      recording, replay and diagnostics tooling and is sold on the Mac App Store, where
-      it’s listed as <strong>Robotics Developer Studio</strong>.
+      Both editions currently ship the same, proven feature set. Community is free and
+      open source, downloaded here. Pro is the same app sold on the Mac App Store — where
+      it’s listed as <strong>Robotics Developer Studio</strong> — for teams that need a
+      purchased licence, an invoice, and managed updates. The advanced tooling below is
+      in development and will land in Pro as it’s finished.
     </p>
 
     <div class="tablewrap">
@@ -575,7 +578,7 @@
             <th scope="col">
               <span class="chip chip-pro">Paid</span>
               <span class="edition-name">Pro</span>
-              <span class="edition-meta">Mac App Store · $49.99</span>
+              <span class="edition-meta">Mac App Store · $49.99 · licensed</span>
             </th>
           </tr>
         </thead>
@@ -584,29 +587,29 @@
           <tr><th scope="row">3D viewport · 14 layers</th><td class="yes">Included</td><td class="yes">Included</td></tr>
           <tr><th scope="row">Robot model (URDF + meshes)</th><td class="yes">Included</td><td class="yes">Included</td></tr>
           <tr><th scope="row">TF tree — text &amp; diagram</th><td class="yes">Included</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">TF Universe — immersive 3D diagnostics</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">TF Universe — immersive 3D diagnostics</th><td class="no">—</td><td class="soon">In development</td></tr>
 
           <tr class="rowgroup"><th scope="row">Inspect</th><td></td><td></td></tr>
           <tr><th scope="row">Topic browser</th><td class="yes">Included</td><td class="yes">Included</td></tr>
           <tr><th scope="row">Raw / JSON message inspector</th><td class="yes">Included</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">Purpose-built visualizations</th><td class="no">—</td><td class="yes">20 views</td></tr>
-          <tr><th scope="row">Time-series plotting</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Purpose-built visualizations</th><td class="no">—</td><td class="soon">In development</td></tr>
+          <tr><th scope="row">Time-series plotting</th><td class="no">—</td><td class="soon">In development</td></tr>
           <tr><th scope="row">/rosout log viewer</th><td class="yes">Included</td><td class="yes">Included</td></tr>
 
           <tr class="rowgroup"><th scope="row">Command</th><td></td><td></td></tr>
           <tr><th scope="row">Publish String / Twist / raw JSON</th><td class="yes">Included</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">Saved message templates</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Saved message templates</th><td class="no">—</td><td class="soon">In development</td></tr>
           <tr><th scope="row">Nav2 goal &amp; 2D pose estimate</th><td class="yes">Included</td><td class="yes">Included</td></tr>
           <tr><th scope="row">Service browser &amp; caller</th><td class="yes">Included</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">Parameter editor, diff &amp; profiles</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Parameter editor, diff &amp; profiles</th><td class="no">—</td><td class="soon">In development</td></tr>
 
           <tr class="rowgroup"><th scope="row">Record &amp; replay</th><td></td><td></td></tr>
-          <tr><th scope="row">Record live topics to MCAP</th><td class="no">—</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">Rosbag playback &amp; timeline</th><td class="no">—</td><td class="yes">Included</td></tr>
-          <tr><th scope="row">Bookmarks &amp; annotations</th><td class="no">—</td><td class="yes">Included</td></tr>
+          <tr><th scope="row">Record live topics to MCAP</th><td class="no">—</td><td class="soon">In development</td></tr>
+          <tr><th scope="row">Rosbag playback &amp; timeline</th><td class="no">—</td><td class="soon">In development</td></tr>
+          <tr><th scope="row">Bookmarks &amp; annotations</th><td class="no">—</td><td class="soon">In development</td></tr>
 
           <tr class="rowgroup"><th scope="row">Connect</th><td></td><td></td></tr>
-          <tr><th scope="row">rosbridge connection</th><td class="yes">1 robot</td><td class="yes">Multiple</td></tr>
+          <tr><th scope="row">rosbridge connection</th><td class="yes">1 robot</td><td class="yes">1 robot</td></tr>
           <tr><th scope="row">Source code</th><td class="yes">Apache 2.0</td><td class="no">Closed</td></tr>
         </tbody>
       </table>
