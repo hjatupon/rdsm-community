@@ -79,7 +79,13 @@ private enum RightPanelTab: String, CaseIterable {
         case .replay: base = [.inspector, .tfTree, .monitor, .plot]
         }
         return base.filter { tab in
-            tab.isProInjected ? ProUIRegistry.shared.hasPanel(id: tab.id) : true
+            // Community hides the Services tab and the Monitor (performance) tab.
+            switch tab {
+            case .services where !AppCapabilities.shared.servicesEnabled:      return false
+            case .monitor   where !AppCapabilities.shared.performanceToolsEnabled: return false
+            default: break
+            }
+            return tab.isProInjected ? ProUIRegistry.shared.hasPanel(id: tab.id) : true
         }
     }
 }
@@ -338,7 +344,7 @@ private struct MainWindowBody: View {
     var body: some View {
         mainBody
             .overlay(alignment: .bottom) {
-                if showPerfPanel {
+                if AppCapabilities.shared.performanceToolsEnabled, showPerfPanel {
                     PerformancePanelView(isPresented: $showPerfPanel)
                         .environmentObject(services)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -349,7 +355,10 @@ private struct MainWindowBody: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) {
                     replayBottomBar
-                    PerformanceFooterBar(showPanel: $showPerfPanel)
+                    // Performance HUD footer — hidden in the Community edition.
+                    if AppCapabilities.shared.performanceToolsEnabled {
+                        PerformanceFooterBar(showPanel: $showPerfPanel)
+                    }
                 }
             }
             .task {
@@ -904,13 +913,16 @@ private struct MainWindowBody: View {
 
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        // Left: session mode control
-        ToolbarItem(placement: .navigation) {
-            SessionModeControl(
-                currentMode: services.sessionMode,
-                onSwitch: { services.setMode($0) },
-                onShowModePicker: nil
-            )
+        // Left: session mode control (Live / Rosbag Replay). Community is live-only,
+        // so the switch — the entry point into replay — is hidden there.
+        if AppCapabilities.shared.rosbagEnabled {
+            ToolbarItem(placement: .navigation) {
+                SessionModeControl(
+                    currentMode: services.sessionMode,
+                    onSwitch: { services.setMode($0) },
+                    onShowModePicker: nil
+                )
+            }
         }
 
         // Center: connection/file status
