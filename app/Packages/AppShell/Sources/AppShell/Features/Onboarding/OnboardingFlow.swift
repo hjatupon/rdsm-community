@@ -61,7 +61,7 @@ private struct WelcomePage: View {
                 .symbolEffect(.pulse)
 
             VStack(spacing: 8) {
-                Text("Welcome to ROS2 Studio")
+                Text("Welcome to \(AppInfo.displayName)")
                     .font(.largeTitle.bold())
                 Text("Your Mac is the beautiful cockpit.\nYour Linux machine runs the robot.")
                     .font(.title3)
@@ -112,7 +112,7 @@ private struct ConnectPage: View {
 
             Spacer()
 
-            Button("Open ROS2 Studio") { onDone() }
+            Button("Open \(AppInfo.displayName)") { onDone() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)

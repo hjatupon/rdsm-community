@@ -38,7 +38,7 @@ private struct GeneralSettingsTab: View {
             }
             Section("Help") {
                 Link("Documentation",
-                     destination: URL(string: "https://ros2studio.app/docs")!)
+                     destination: AppInfo.docsURL)
                 Link("Report an Issue",
                      destination: URL(string: "mailto:jatupon.h@icloud.com?subject=ROS2%20Studio%20Issue")!)
             }
@@ -133,7 +133,7 @@ private struct RobotModelSettingsTab: View {
 private struct AboutTab: View {
     var body: some View {
         Form {
-            Section("ROS2 Studio") {
+            Section(AppInfo.displayName) {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
                 LabeledContent("Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—")
             }

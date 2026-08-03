@@ -25,7 +25,7 @@ struct ModeSelectorView: View {
                 .symbolEffect(.pulse)
                 .padding(.top, 32)
 
-            Text("ROS2 Studio")
+            Text(AppInfo.displayName)
                 .font(.title.bold())
 
             Text("Your Mac is the beautiful cockpit.\nChoose your session mode to get started.")

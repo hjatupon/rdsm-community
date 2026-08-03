@@ -1,4 +1,4 @@
-name: ROS2Studio
+name: RDSMCommunity
 options:
   bundleIdPrefix: com.jatupon
   deploymentTarget:
@@ -9,7 +9,7 @@ options:
 
 settings:
   base:
-    PRODUCT_NAME: ROS2Studio
+    PRODUCT_NAME: RDSMCommunity
     SWIFT_VERSION: 6.0
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     ARCHS: "$(ARCHS_STANDARD)"
@@ -76,18 +76,18 @@ packages:
     path: Packages/ServiceCallUI
 
 targets:
-  ROS2Studio:
+  RDSMCommunity:
     type: application
     platform: macOS
     deploymentTarget: "15.0"
     sources:
-      - path: ROS2Studio
+      - path: RDSMCommunity
     info:
-      path: ROS2Studio/Info.plist
+      path: RDSMCommunity/Info.plist
       properties:
-        CFBundleName: "ROS2 Studio"
-        CFBundleDisplayName: ROS2 Studio
-        CFBundleIdentifier: com.jatupon.ros2studio
+        CFBundleName: "RDSM Community"
+        CFBundleDisplayName: RDSM Community
+        CFBundleIdentifier: com.jatupon.rdsm.community
         CFBundleVersion: "1"
         CFBundleShortVersionString: "1.0"
         LSMinimumSystemVersion: "15.0"
@@ -97,9 +97,8 @@ targets:
         ITSAppUsesNonExemptEncryption: NO
         LSApplicationCategoryType: public.app-category.developer-tools
     entitlements:
-      path: ROS2Studio/ROS2Studio.entitlements
+      path: RDSMCommunity/RDSMCommunity.entitlements
       properties:
-        com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.files.user-selected.read-write: true
     dependencies:
@@ -131,16 +130,18 @@ targets:
       - package: ServiceCallUI
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jatupon.ros2studio
-        INFOPLIST_FILE: ROS2Studio/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.jatupon.rdsm.community
+        INFOPLIST_FILE: RDSMCommunity/Info.plist
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Release:
+          # Direct-download (notarized) distribution — NOT Mac App Store.
+          # Requires a "Developer ID Application" certificate; the build is then
+          # notarized + stapled (see scripts/build-community.sh).
           CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: "Apple Distribution"
-          PROVISIONING_PROFILE_SPECIFIER: "ROS2 Studio App Store"
+          CODE_SIGN_IDENTITY: "Developer ID Application"
           DEVELOPMENT_TEAM: MZUPC2WYBN
 

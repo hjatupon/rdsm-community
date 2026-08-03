@@ -174,18 +174,16 @@ public struct AppRootScene: Scene {
 
             // Help menu — replace defaults with useful links
             CommandGroup(replacing: .help) {
-                Button("ROS2 Studio Documentation") {
-                    if let url = URL(string: "https://ros2studio.app/docs") {
-                        NSWorkspace.shared.open(url)
-                    }
+                Button("\(AppInfo.displayName) Documentation") {
+                    NSWorkspace.shared.open(AppInfo.docsURL)
                 }
                 Button("Report an Issue") {
-                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=ROS2%20Studio%20Issue") {
+                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=RDSM%20Issue") {
                         NSWorkspace.shared.open(url)
                     }
                 }
                 Button("Send Feedback") {
-                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=ROS2%20Studio%20Feedback") {
+                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=RDSM%20Feedback") {
                         NSWorkspace.shared.open(url)
                     }
                 }

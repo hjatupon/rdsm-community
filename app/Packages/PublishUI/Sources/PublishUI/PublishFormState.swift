@@ -6,7 +6,7 @@ import Foundation
 public final class PublishFormState: ObservableObject {
     @Published public var topic: String = ""
     @Published public var messageKind: MessageKind = .string
-    @Published public var stringText: String = "Hello from ROS2 Studio"
+    @Published public var stringText: String = "Hello from RDSM"
     @Published public var linearX: String = "0.0"
     @Published public var linearY: String = "0.0"
     @Published public var linearZ: String = "0.0"
