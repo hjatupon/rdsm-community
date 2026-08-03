@@ -205,18 +205,13 @@ public struct AppRootScene: Scene {
                 }
             }
 
-            // Community: strip the "Settings…" menu item (⌘,). Replacing the
-            // .appSettings group with nothing removes the item the Settings scene
-            // would otherwise contribute, leaving the Preferences window unreachable.
-            if !AppCapabilities.shared.settingsWindowEnabled {
-                CommandGroup(replacing: .appSettings) { }
-            }
         }
 
         // The Settings scene stays unconditional (SwiftUI's SceneBuilder does not
-        // allow a runtime `if` around a scene). The Community edition instead removes
-        // the "Settings…" menu item and its ⌘, shortcut via `.appSettings` above, so
-        // this window has no entry point there.
+        // allow a runtime `if` around a scene, and CommandGroup(replacing: .appSettings)
+        // does not override the item the scene itself contributes). The Community
+        // edition instead removes the "Settings…" menu item from AppKit at launch (see
+        // AppDelegate), so this window has no entry point there.
         Settings {
             SettingsView()
                 .environmentObject(services)
