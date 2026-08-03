@@ -2,6 +2,8 @@
 
 **Robotics Developer Studio for Mac** — the free, open-source core.
 
+**Website:** https://hjatupon.github.io/rdsm-community/
+
 A native macOS cockpit for ROS 2 developers. The Mac is the beautiful cockpit; the
 Linux robot is the engine. Built with SwiftUI + Metal, talking to robots over
 rosbridge (WebSocket) — no ROS installation required on your Mac.
