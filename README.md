@@ -1,6 +1,6 @@
 # RDSM Community
 
-**Robotics Developer Studio for Mac** — the free, open-source core.
+**Robotics Developer Studio for Mac (RDSM)** — the free, open-source core.
 
 **Website:** https://hjatupon.github.io/rdsm-community/
 
@@ -8,10 +8,11 @@ A native macOS cockpit for ROS 2 developers. The Mac is the beautiful cockpit; t
 Linux robot is the engine. Built with SwiftUI + Metal, talking to robots over
 rosbridge (WebSocket) — no ROS installation required on your Mac.
 
-> **RDSM Community** is the open-source foundation. **RDSM Pro** adds advanced
+> **RDSM Community** is the open-source foundation. The **Pro** edition — listed on the
+> Mac App Store as **Robotics Developer Studio** ($49.99) — adds advanced
 > debugging tools (rosbag record/replay, time-series plotting, parameter profiles,
 > purpose-built inspector visualizations, the immersive TF Universe, message
-> templates, and more) and is available on the Mac App Store.
+> templates, and more).
 
 ## Features (Community)
 
