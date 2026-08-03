@@ -98,13 +98,19 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          # Signing is pinned explicitly here as well as in project.yml's Release
+          # config, so a future edit to project.yml can't silently switch CI to
+          # Automatic signing (which fails on a headless runner with no Xcode
+          # account). Developer ID needs no provisioning profile.
           xcodebuild archive \
             -project RDSMCommunity.xcodeproj \
             -scheme RDSMCommunity \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/RDSMCommunity.xcarchive" \
             -destination 'generic/platform=macOS' \
-            DEVELOPMENT_TEAM="$TEAM_ID"
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application"
 
       - name: Export with Developer ID
         if: steps.gate.outputs.should_release == 'true'
