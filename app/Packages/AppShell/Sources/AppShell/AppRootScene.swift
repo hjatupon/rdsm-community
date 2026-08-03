@@ -32,8 +32,16 @@ public struct AppRootScene: Scene {
                 .onAppear {
                     // Give AppDelegate a reference for window-close + Cmd+Q disconnect
                     AppDelegate.services = services
-                    if !UserDefaults.standard.bool(forKey: "hasSeenModeSelector") {
-                        showModeSelector = true
+                    if AppCapabilities.shared.rosbagEnabled {
+                        if !UserDefaults.standard.bool(forKey: "hasSeenModeSelector") {
+                            showModeSelector = true
+                        }
+                    } else {
+                        // Community: there is no replay mode to choose. Go straight to
+                        // the live cockpit and show the welcome flow on first launch.
+                        if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+                            showOnboarding = true
+                        }
                     }
                     // Restore window origin from saved frame, or center on screen
                     if let window = NSApp.windows.first(where: { $0.minSize.width >= 1000 }) {
@@ -88,14 +96,16 @@ public struct AppRootScene: Scene {
                 .keyboardShortcut("n", modifiers: [.command])
                 .disabled(services.sessionMode != .live && services.activeConnectionHandles.isEmpty)
 
-                Button("Open Rosbag…") {
-                    if services.sessionMode == .live {
-                        services.setMode(.replay)
+                if AppCapabilities.shared.rosbagEnabled {
+                    Button("Open Rosbag…") {
+                        if services.sessionMode == .live {
+                            services.setMode(.replay)
+                        }
+                        NotificationCenter.default.post(
+                            name: Notification.Name("com.jatupon.ros2studio.openRosbag"), object: nil)
                     }
-                    NotificationCenter.default.post(
-                        name: Notification.Name("com.jatupon.ros2studio.openRosbag"), object: nil)
+                    .keyboardShortcut("o", modifiers: [.command])
                 }
-                .keyboardShortcut("o", modifiers: [.command])
 
                 Divider()
 
@@ -103,13 +113,15 @@ public struct AppRootScene: Scene {
                     .keyboardShortcut("d", modifiers: [.command, .control])
                     .disabled(services.activeConnectionHandles.isEmpty)
 
-                Divider()
+                if AppCapabilities.shared.rosbagEnabled {
+                    Divider()
 
-                Button("Choose Session Mode…") {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("com.jatupon.ros2studio.showModeSelector"), object: nil)
+                    Button("Choose Session Mode…") {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("com.jatupon.ros2studio.showModeSelector"), object: nil)
+                    }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
                 }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
             }
 
             // View menu — tab switching + camera
@@ -131,14 +143,16 @@ public struct AppRootScene: Scene {
                 }
                 .keyboardShortcut("3", modifiers: [.command])
 
-                Divider()
+                if AppCapabilities.shared.rosbagEnabled {
+                    Divider()
 
-                Button("ROS Bag Manager…") {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("com.jatupon.ros2studio.openBagManager"),
-                        object: nil)
+                    Button("ROS Bag Manager…") {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("com.jatupon.ros2studio.openBagManager"),
+                            object: nil)
+                    }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
                 }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
 
                 Divider()
 
@@ -149,27 +163,29 @@ public struct AppRootScene: Scene {
                 .keyboardShortcut("r", modifiers: [])
             }
 
-            CommandMenu("Bookmarks") {
-                Button("Add Bookmark") {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("ros2studio.addBookmark"), object: nil)
-                }
-                .keyboardShortcut("b", modifiers: [])
-                .disabled(!services.isReplayActive)
+            if AppCapabilities.shared.rosbagEnabled {
+                CommandMenu("Bookmarks") {
+                    Button("Add Bookmark") {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("ros2studio.addBookmark"), object: nil)
+                    }
+                    .keyboardShortcut("b", modifiers: [])
+                    .disabled(!services.isReplayActive)
 
-                Button("Jump to Previous Bookmark") {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("ros2studio.previousBookmark"), object: nil)
-                }
-                .keyboardShortcut("[", modifiers: [])
-                .disabled(!services.isReplayActive)
+                    Button("Jump to Previous Bookmark") {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("ros2studio.previousBookmark"), object: nil)
+                    }
+                    .keyboardShortcut("[", modifiers: [])
+                    .disabled(!services.isReplayActive)
 
-                Button("Jump to Next Bookmark") {
-                    NotificationCenter.default.post(
-                        name: Notification.Name("ros2studio.nextBookmark"), object: nil)
+                    Button("Jump to Next Bookmark") {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("ros2studio.nextBookmark"), object: nil)
+                    }
+                    .keyboardShortcut("]", modifiers: [])
+                    .disabled(!services.isReplayActive)
                 }
-                .keyboardShortcut("]", modifiers: [])
-                .disabled(!services.isReplayActive)
             }
 
             // Help menu — replace defaults with useful links
@@ -188,8 +204,19 @@ public struct AppRootScene: Scene {
                     }
                 }
             }
+
+            // Community: strip the "Settings…" menu item (⌘,). Replacing the
+            // .appSettings group with nothing removes the item the Settings scene
+            // would otherwise contribute, leaving the Preferences window unreachable.
+            if !AppCapabilities.shared.settingsWindowEnabled {
+                CommandGroup(replacing: .appSettings) { }
+            }
         }
 
+        // The Settings scene stays unconditional (SwiftUI's SceneBuilder does not
+        // allow a runtime `if` around a scene). The Community edition instead removes
+        // the "Settings…" menu item and its ⌘, shortcut via `.appSettings` above, so
+        // this window has no entry point there.
         Settings {
             SettingsView()
                 .environmentObject(services)
