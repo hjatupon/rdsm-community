@@ -33,6 +33,75 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWindow.didMoveNotification,
             object: nil
         )
+
+        // Editions without a Settings window (Community) must not show the
+        // "Settings…" item. SwiftUI provides no supported way to drop it while a
+        // `Settings` scene exists (CommandGroup(replacing: .appSettings) does not
+        // override the scene-provided item), so remove it from the app menu directly.
+        // SwiftUI adds the item after launch and may re-add it when it rebuilds the
+        // menu, so keep sweeping for a while rather than removing once.
+        MainActor.assumeIsolated {
+            if !AppCapabilities.shared.settingsWindowEnabled {
+                AppDelegate.startStrippingSettingsMenuItem()
+            }
+        }
+    }
+
+    /// Re-strip immediately when the app regains focus (a common moment for SwiftUI
+    /// to have rebuilt the menu while inactive), so the item never lingers a frame.
+    public func applicationDidBecomeActive(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            if !AppCapabilities.shared.settingsWindowEnabled {
+                _ = AppDelegate.removeSettingsMenuItemNow()
+            }
+        }
+    }
+
+    /// Keeps the Settings item out of the app menu for the app's lifetime.
+    ///
+    /// SwiftUI re-adds the item whenever it rebuilds the menu (e.g. when a bound
+    /// command's state changes on connect/disconnect), and offers no API to suppress
+    /// it while a `Settings` scene exists. Removing it once is therefore not enough.
+    /// A 0.5s sweep is far below the cost of noticing — it walks ~7 static menus — and
+    /// runs only in editions that hide Settings (Community); the paid build never
+    /// starts it.
+    @MainActor
+    private static func startStrippingSettingsMenuItem() {
+        _ = removeSettingsMenuItemNow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            MainActor.assumeIsolated { startStrippingSettingsMenuItem() }
+        }
+    }
+
+    /// Removes the Settings/Preferences item from whichever top-level menu holds it
+    /// (normally the app menu). Returns whether it was found and removed.
+    @MainActor
+    @discardableResult
+    private static func removeSettingsMenuItemNow() -> Bool {
+        guard let mainMenu = NSApp.mainMenu else { return false }
+        let settingsSelectors: Set<Selector> = [
+            Selector(("showSettingsWindow:")),
+            Selector(("showPreferencesWindow:")),
+            Selector(("orderFrontStandardPreferencesPanel:"))
+        ]
+        let matches: (NSMenuItem) -> Bool = { item in
+            (item.action.map { settingsSelectors.contains($0) } ?? false)
+                || item.title.hasPrefix("Settings")
+                || item.title.hasPrefix("Preferences")
+        }
+        for topItem in mainMenu.items {
+            guard let submenu = topItem.submenu,
+                  let idx = submenu.items.firstIndex(where: matches)
+            else { continue }
+            submenu.removeItem(at: idx)
+            // Collapse a now-doubled separator left behind by the removal.
+            if idx < submenu.items.count, submenu.items[idx].isSeparatorItem,
+               idx > 0, submenu.items[idx - 1].isSeparatorItem {
+                submenu.removeItem(at: idx)
+            }
+            return true
+        }
+        return false
     }
 
     @objc private func handleWindowResize(_ notification: Notification) {
