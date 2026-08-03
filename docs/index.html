@@ -252,6 +252,32 @@
   .specs div:last-child { border-right: 0; }
   .specs b { color: var(--ink); font-weight: 550; }
 
+  /* ---------- showcase ---------- */
+  .showcase { padding-block: clamp(40px, 7vh, 72px); }
+  .shot {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 8px;
+    box-shadow: var(--shadow);
+  }
+  .shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+  }
+  .shot-caption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .shot-caption b { color: var(--accent); font-weight: 550; }
+
   /* ---------- sections ---------- */
   section { padding-block: clamp(56px, 9vh, 96px); }
   .sec-label {
@@ -505,6 +531,22 @@
       <div><b>Metal 4</b> renderer</div>
     </div>
   </div>
+
+  <section class="wrap showcase">
+    <figure class="shot" style="margin:0">
+      <img src="img/rdsm-scene-inspector.png"
+           width="1918" height="1200" loading="lazy"
+           alt="RDSM showing a TurtleBot3 in a simulated room: a teal LiDAR point cloud and
+                occupancy grid on the floor plane, the robot's URDF model and TF frames, the
+                layers panel on the left, and the inspector on the right reading a raw
+                sensor_msgs/msg/LaserScan message.">
+      <figcaption class="shot-caption">
+        <span><b>Scene</b> LaserScan · OccupancyGrid · RobotModel · TF frames</span>
+        <span><b>Inspector</b> raw sensor_msgs/msg/LaserScan</span>
+        <span><b>Live</b> 78 topics over rosbridge</span>
+      </figcaption>
+    </figure>
+  </section>
 
   <section class="wrap" id="features">
     <p class="sec-label">What you get, free</p>
