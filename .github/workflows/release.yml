@@ -1,36 +1,67 @@
 name: Release
 
-# Builds, signs, notarizes and publishes RDSM Community.
+# Continuous delivery for RDSM Community.
 #
-# Runs only on a version tag or a manual dispatch — never on pull requests, so
-# forked PRs can never reach the signing secrets.
+# On every push to main (i.e. every merge), read the marketing version from
+# app/project.yml. If a release for that version does not exist yet, build, sign,
+# notarize, staple, and publish it — then GitHub Pages (which points the download
+# button at /releases/latest/download/RDSM-Community.zip) serves it automatically.
+#
+# Merges that do NOT bump the version are a no-op here: the PR compile-check in
+# ci.yml already proved they build. To ship a release, bump
+# CFBundleShortVersionString in app/project.yml and merge.
+#
+# Never runs on pull_request, so forked PRs can never reach the signing secrets.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to build (e.g. 1.1). Defaults to the tag."
-        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Select Xcode 26.3
+        # Match the developer's local toolchain exactly (see ci.yml for why).
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      - name: Determine version and whether to release
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/.*CFBundleShortVersionString:[[:space:]]*"\([^"]*\)".*/\1/p' app/project.yml | head -1)"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read CFBundleShortVersionString from app/project.yml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping publish."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version v$VERSION is new — will build and publish."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install XcodeGen
+        if: steps.gate.outputs.should_release == 'true'
         run: brew install xcodegen
 
       - name: Import signing certificate
+        if: steps.gate.outputs.should_release == 'true'
         env:
           CERT_B64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -56,10 +87,12 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN" | grep "Developer ID Application"
 
       - name: Generate project
+        if: steps.gate.outputs.should_release == 'true'
         working-directory: app
         run: xcodegen generate --spec project.yml
 
       - name: Archive
+        if: steps.gate.outputs.should_release == 'true'
         working-directory: app
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -74,6 +107,7 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID"
 
       - name: Export with Developer ID
+        if: steps.gate.outputs.should_release == 'true'
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
@@ -96,6 +130,7 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
 
       - name: Notarize and staple
+        if: steps.gate.outputs.should_release == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -116,24 +151,53 @@ jobs:
           spctl --assess --type execute --verbose=2 "$APP"
 
       - name: Package
+        if: steps.gate.outputs.should_release == 'true'
         id: package
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          [ -n "${{ inputs.version }}" ] && VERSION="${{ inputs.version }}"
-          ZIP="$RUNNER_TEMP/RDSM-Community-${VERSION}.zip"
+          VERSION="${{ steps.gate.outputs.version }}"
+          # Stable asset name so the website's /releases/latest/download link never
+          # changes; the version lives in the release title, tag, and the app itself.
+          ZIP="$RUNNER_TEMP/RDSM-Community.zip"
           ditto -c -k --keepParent "$RUNNER_TEMP/export/RDSMCommunity.app" "$ZIP"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 "$ZIP" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
+        if: steps.gate.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
         run: |
           set -euo pipefail
-          gh release upload "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" --clobber
-          echo "Published ${{ steps.package.outputs.zip }}"
-          echo "sha256: ${{ steps.package.outputs.sha256 }}"
+          NOTES="$RUNNER_TEMP/notes.md"
+          cat > "$NOTES" <<EOF
+          RDSM Community v${VERSION} — signed with Developer ID and notarized by Apple, so it opens without security warnings.
+
+          ### Install
+          1. Download and unzip
+          2. Drag **RDSM Community.app** to Applications
+          3. Launch and connect to \`ws://<robot-host>:9090\`
+
+          Requires macOS 15 (Sequoia) or later. No ROS installation needed on your Mac.
+
+          ### Verify the download
+          \`\`\`
+          shasum -a 256 RDSM-Community.zip
+          # ${SHA256}
+          \`\`\`
+          EOF
+          # Create the tag+release from this commit and attach the stable-named asset.
+          gh release create "v${VERSION}" "${{ steps.package.outputs.zip }}" \
+            --target "$GITHUB_SHA" \
+            --title "RDSM Community ${VERSION}" \
+            --notes-file "$NOTES"
+          echo "Published v${VERSION} (sha256 ${SHA256})"
+
+      - name: Nothing to release
+        if: steps.gate.outputs.should_release != 'true'
+        run: echo "Version ${{ steps.gate.outputs.version }} is already released. No action."
 
       - name: Clean up keychain
         if: always()

@@ -1,0 +1,52 @@
+name: CI
+
+# Compile-check for every pull request into main, plus on-demand via the Actions
+# tab. No signing, no secrets, no publishing — just proof the code builds on the
+# same toolchain we release with. This is the required status check that gates
+# merges into the protected main branch.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel an in-progress check when the PR gets a new push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.3
+        # Must match the developer's local toolchain (Xcode 26.3 / Swift 6.2) so CI
+        # sees the exact same strict-concurrency behaviour. Older Xcode ships an
+        # older SDK whose @MainActor/@Sendable annotations differ and produce
+        # spurious concurrency errors on code that is correct under 26.3.
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        working-directory: app
+        run: xcodegen generate --spec project.yml
+
+      - name: Build (unsigned, Release config)
+        working-directory: app
+        run: |
+          set -euo pipefail
+          # Same configuration and sources as the release archive, minus signing —
+          # so a green build here means the archive will compile too.
+          xcodebuild build \
+            -project RDSMCommunity.xcodeproj \
+            -scheme RDSMCommunity \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
