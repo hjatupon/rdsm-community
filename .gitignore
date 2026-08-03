@@ -51,3 +51,4 @@ distribution-audit-*.log
 
 # Recorded test bags (large; not versioned)
 testing/sim-bot/bags/
+build/
