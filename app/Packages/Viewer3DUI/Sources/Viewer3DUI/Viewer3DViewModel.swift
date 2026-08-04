@@ -61,6 +61,41 @@ public final class Viewer3DViewModel {
     /// cancel and restart only the layers that actually changed instead of tearing
     /// down and recreating every subscription on any layer-list edit.
     private var subscriptionTasksByLayer: [UUID: [Task<Void, Never>]] = [:]
+    /// Cached transforms, keyed by sensor frame name, refreshed by a lightweight
+    /// per-frame polling task rather than being awaited inline in a message handler.
+    /// Mirrors `subscribeRobotModel`'s TF tracking task — a dedicated poll decoupled
+    /// from message delivery — which has never crashed on Intel, unlike the message
+    /// types that previously awaited `tfTree.lookup` directly inside the same
+    /// long-running Task that also delivers messages and hops to MainActor to render.
+    private var tfCache: [String: TFTransform] = [:]
+    private var tfPollingStarted: Set<String> = []
+    private var tfPollingTasks: [Task<Void, Never>] = []
+
+    /// Returns a cached transform for `sensorFrame → fixedFrame`, lazily starting a
+    /// background poll for it on first request. Never awaits `tfTree` itself.
+    private func cachedTF(from sensorFrame: String) -> TFTransform? {
+        if sensorFrame == fixedFrame { return .identity }
+        if tfPollingStarted.insert(sensorFrame).inserted {
+            let task = Task { [weak self] in
+                guard let self else { return }
+                while !Task.isCancelled {
+                    let fixed = self.fixedFrame
+                    if sensorFrame == fixed {
+                        self.tfCache[sensorFrame] = .identity
+                    } else {
+                        let now = UInt64(Date().timeIntervalSince1970 * 1e9)
+                        if let tf = await self.tfTree.lookup(from: sensorFrame, to: fixed, at: now) {
+                            self.tfCache[sensorFrame] = tf
+                        }
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 10 Hz, matches RobotModel's TF poll rate
+                }
+            }
+            tfPollingTasks.append(task)
+        }
+        return tfCache[sensorFrame]
+    }
+
     /// Per-layer position trail for decay-time aware rendering (Odometry, PoseStamped).
     private var layerTrails: [String: [(timestamp: Date, data: Data)]] = [:]
     /// Current active layers (used by TF-frame refresh).
@@ -246,6 +281,10 @@ public final class Viewer3DViewModel {
     public func stopSubscriptions() {
         subscriptionTasksByLayer.values.forEach { tasks in tasks.forEach { $0.cancel() } }
         subscriptionTasksByLayer.removeAll()
+        tfPollingTasks.forEach { $0.cancel() }
+        tfPollingTasks.removeAll()
+        tfPollingStarted.removeAll()
+        tfCache.removeAll()
         layerTrails.removeAll()
         layerLastReceived.removeAll()
         layerReceiveTimes.removeAll()
@@ -332,43 +371,50 @@ public final class Viewer3DViewModel {
         else { return }
 
         // --- TF transform: sensor frame → fixed frame ---
-        // Parse frame_id and stamp from message header.
-        let sensorFrame: String
-        var stampNs: UInt64 = UInt64(Date().timeIntervalSince1970 * 1e9)
-        if let header = obj["header"] as? [String: Any] {
-            sensorFrame = (header["frame_id"] as? String) ?? fixedFrame
-            if let stamp = header["stamp"] as? [String: Any] {
-                let sec  = (stamp["sec"]  as? UInt64) ?? UInt64((stamp["sec"]  as? Int) ?? 0)
-                let nsec = (stamp["nanosec"] as? UInt64) ?? UInt64((stamp["nanosec"] as? Int) ?? 0)
-                stampNs = sec * 1_000_000_000 + nsec
-            }
-        } else {
-            sensorFrame = fixedFrame
-        }
+        let sensorFrame = (obj["header"] as? [String: Any])?["frame_id"] as? String ?? fixedFrame
 
-        // Look up the transform from sensor frame to fixed frame once per message.
-        // Returns nil when TF tree has no path — fall back to identity (no transform).
-        let tf: TFTransform?
-        if sensorFrame == fixedFrame {
-            tf = .identity
-        } else {
-            tf = await tfTree.lookup(from: sensorFrame, to: fixedFrame, at: stampNs)
-        }
+        // Read from the cache — never awaits tfTree inline (see cachedTF).
+        let tf = cachedTF(from: sensorFrame)
 
-        let useDistanceColor = layer.settings.colorMode == .byDistance
-        let useIntensityColor = layer.settings.colorMode == .byIntensity
+        // Everything from here on is a plain synchronous function call — no `await`
+        // happens inside it. PointCloud2 (the one message type on this screen that
+        // has never crashed) has this same shape: a single synchronous hot loop with
+        // no suspension point inside it. LaserScan/OccupancyGrid/Octomap previously
+        // ran their equivalent hot loop as a continuation of this function *after*
+        // resuming from the `await tfTree.lookup` above; pulling it out into its own
+        // ordinary function means the compiler never has to represent "mid-loop,
+        // holding a raw pointer into a growing Data buffer" as part of an async
+        // continuation's captured state.
+        guard let frame = Self.buildLaserScanFrame(
+            rangesAny: rangesAny, angleMin: angleMin, angleInc: angleInc,
+            rangeMin: rangeMin, rangeMax: rangeMax,
+            intensitiesAny: obj["intensities"] as? [Any], tf: tf, settings: layer.settings
+        ) else { return }
+
+        await MainActor.run {
+            self.pointCloudRenderer?.update(topic: layerID.uuidString, frame: frame)
+            self.messageCount += 1
+            self.recordMessageReceived(layerID: layerID)
+        }
+    }
+
+    nonisolated private static func buildLaserScanFrame(
+        rangesAny: [Any], angleMin: Double, angleInc: Double,
+        rangeMin: Double, rangeMax: Double,
+        intensitiesAny: [Any]?, tf: TFTransform?, settings: LayerSettings
+    ) -> PointCloudFrame? {
+        let useDistanceColor = settings.colorMode == .byDistance
+        let useIntensityColor = settings.colorMode == .byIntensity
         let needPerPointColor = useDistanceColor || useIntensityColor
         // Message hardware range limits
         let msgRangeMin = Float(rangeMin)
         let msgRangeMax = Float(rangeMax)
         // User range filter (applied on top of hardware limits — always active)
-        let userRangeMin = Float(layer.settings.rangeMin)
-        let userRangeMax = Float(layer.settings.rangeMax)
-        let distMin = Float(layer.settings.rangeMin)
-        let distMax = Float(max(layer.settings.rangeMax, layer.settings.rangeMin + 0.01))
-        let vizMode = layer.settings.scanVizMode
-        // Parse intensities if available
-        let intensitiesAny = obj["intensities"] as? [Any]
+        let userRangeMin = Float(settings.rangeMin)
+        let userRangeMax = Float(settings.rangeMax)
+        let distMin = Float(settings.rangeMin)
+        let distMax = Float(max(settings.rangeMax, settings.rangeMin + 0.01))
+        let vizMode = settings.scanVizMode
         var intensityMin: Float = 0
         var intensityMax: Float = 1
         if useIntensityColor, let ints = intensitiesAny {
@@ -423,7 +469,7 @@ public final class Viewer3DViewModel {
                 withUnsafeBytes(of: &ofz) { positionBytes.append(contentsOf: $0) }
                 // Use flat layer color for the origin point
                 if needPerPointColor {
-                    colorBytes?.append(contentsOf: [UInt8(layer.settings.r * 255), UInt8(layer.settings.g * 255), UInt8(layer.settings.b * 255), 255])
+                    colorBytes?.append(contentsOf: [UInt8(settings.r * 255), UInt8(settings.g * 255), UInt8(settings.b * 255), 255])
                 }
                 count += 1
             }
@@ -480,18 +526,13 @@ public final class Viewer3DViewModel {
 
             count += 1
         }
-        guard count > 0 else { return }
+        guard count > 0 else { return nil }
 
-        let pointColorMode: PointColorMode = needPerPointColor ? .rgb : colorMode(for: layer.settings)
-        let frame = PointCloudFrame(pointCount: count, positions: positionBytes,
-                                    intensities: nil, colors: colorBytes,
-                                    pointSize: layer.settings.pointSize,
-                                    colorMode: pointColorMode)
-        await MainActor.run {
-            self.pointCloudRenderer?.update(topic: layer.id.uuidString, frame: frame)
-            self.messageCount += 1
-            self.recordMessageReceived(layerID: layerID)
-        }
+        let pointColorMode: PointColorMode = needPerPointColor ? .rgb : colorMode(for: settings)
+        return PointCloudFrame(pointCount: count, positions: positionBytes,
+                               intensities: nil, colors: colorBytes,
+                               pointSize: settings.pointSize,
+                               colorMode: pointColorMode)
     }
 
     // MARK: - PointCloud2
@@ -696,19 +737,8 @@ public final class Viewer3DViewModel {
 
         guard dataArr.count <= 1_000_000 else { return }
 
-        // Parse header frame_id and stamp (same pattern as handleLaserScan).
-        let headerFrame: String
-        var stampNs: UInt64 = UInt64(Date().timeIntervalSince1970 * 1e9)
-        if let header = obj["header"] as? [String: Any] {
-            headerFrame = (header["frame_id"] as? String) ?? fixedFrame
-            if let stamp = header["stamp"] as? [String: Any] {
-                let sec  = (stamp["sec"]  as? UInt64) ?? UInt64((stamp["sec"]  as? Int) ?? 0)
-                let nsec = (stamp["nanosec"] as? UInt64) ?? UInt64((stamp["nanosec"] as? Int) ?? 0)
-                stampNs = sec * 1_000_000_000 + nsec
-            }
-        } else {
-            headerFrame = fixedFrame
-        }
+        // Parse header frame_id (same pattern as handleLaserScan).
+        let headerFrame = (obj["header"] as? [String: Any])?["frame_id"] as? String ?? fixedFrame
 
         let originDict = info["origin"] as? [String: Any]
         let pos = originDict.flatMap { $0["position"] as? [String: Any] }
@@ -726,39 +756,30 @@ public final class Viewer3DViewModel {
         }
 
         // Apply TF transform from map's header frame to the fixed frame (in ROS space).
-        // If same frame, skip lookup. If lookup fails, fall back to identity (render at info.origin).
+        // Read from the cache — never awaits tfTree inline (see cachedTF). Falls back
+        // to identity (render at info.origin) when same frame or no cached transform yet.
         let finalOriginX: Float
         let finalOriginY: Float
         let finalOriginRotation: simd_quatf
 
-        if headerFrame == fixedFrame {
+        if let tf = cachedTF(from: headerFrame), headerFrame != fixedFrame {
+            // Compose: world position = tf.rotation.act(originRos) + tf.translation
+            let pWorld = tf.rotation.act(SIMD3<Double>(originRosX, originRosY, 0)) + tf.translation
+            // Compose: world rotation = tf.rotation * originQuat (ROS quaternion multiplication)
+            let qWorld = tf.rotation * originQuatRos
+            finalOriginX = Float(pWorld.x)
+            finalOriginY = Float(pWorld.y)
+            finalOriginRotation = simd_quatf(ix: Float(qWorld.imag.x),
+                                             iy: Float(qWorld.imag.y),
+                                             iz: Float(qWorld.imag.z),
+                                             r:  Float(qWorld.real))
+        } else {
             finalOriginX = Float(originRosX)
             finalOriginY = Float(originRosY)
             finalOriginRotation = simd_quatf(ix: Float(originQuatRos.imag.x),
                                              iy: Float(originQuatRos.imag.y),
                                              iz: Float(originQuatRos.imag.z),
                                              r:  Float(originQuatRos.real))
-        } else {
-            let tf = await tfTree.lookup(from: headerFrame, to: fixedFrame, at: stampNs)
-            if let tf {
-                // Compose: world position = tf.rotation.act(originRos) + tf.translation
-                let pWorld = tf.rotation.act(SIMD3<Double>(originRosX, originRosY, 0)) + tf.translation
-                // Compose: world rotation = tf.rotation * originQuat (ROS quaternion multiplication)
-                let qWorld = tf.rotation * originQuatRos
-                finalOriginX = Float(pWorld.x)
-                finalOriginY = Float(pWorld.y)
-                finalOriginRotation = simd_quatf(ix: Float(qWorld.imag.x),
-                                                 iy: Float(qWorld.imag.y),
-                                                 iz: Float(qWorld.imag.z),
-                                                 r:  Float(qWorld.real))
-            } else {
-                finalOriginX = Float(originRosX)
-                finalOriginY = Float(originRosY)
-                finalOriginRotation = simd_quatf(ix: Float(originQuatRos.imag.x),
-                                                 iy: Float(originQuatRos.imag.y),
-                                                 iz: Float(originQuatRos.imag.z),
-                                                 r:  Float(originQuatRos.real))
-            }
         }
 
         let topicKey = layerID.uuidString
@@ -826,19 +847,8 @@ public final class Viewer3DViewModel {
         guard activeLayers.first(where: { $0.id == layerID }) != nil else { return }
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
-        // Parse header for frame_id and stamp
-        let headerFrame: String
-        var stampNs: UInt64 = UInt64(Date().timeIntervalSince1970 * 1e9)
-        if let header = obj["header"] as? [String: Any] {
-            headerFrame = (header["frame_id"] as? String) ?? fixedFrame
-            if let stamp = header["stamp"] as? [String: Any] {
-                let sec  = (stamp["sec"]  as? UInt64) ?? UInt64((stamp["sec"]  as? Int) ?? 0)
-                let nsec = (stamp["nanosec"] as? UInt64) ?? UInt64((stamp["nanosec"] as? Int) ?? 0)
-                stampNs = sec * 1_000_000_000 + nsec
-            }
-        } else {
-            headerFrame = fixedFrame
-        }
+        // Parse header for frame_id
+        let headerFrame = (obj["header"] as? [String: Any])?["frame_id"] as? String ?? fixedFrame
 
         // Get binary data
         guard let binaryData = obj["data"] as? String,
@@ -849,8 +859,9 @@ public final class Viewer3DViewModel {
         // Get resolution
         let resolution = (obj["resolution"] as? Double) ?? 0.05
 
-        // Look up TF transform from header frame to fixed frame
-        let tf = headerFrame == fixedFrame ? TFTransform.identity : await tfTree.lookup(from: headerFrame, to: fixedFrame, at: stampNs)
+        // Look up TF transform from header frame to fixed frame. Read from the
+        // cache — never awaits tfTree inline (see cachedTF).
+        let tf = cachedTF(from: headerFrame)
 
         // Parse octree nodes from binary data
         // Simplified: extract leaf nodes with position and occupied status
