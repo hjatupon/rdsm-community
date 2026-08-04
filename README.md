@@ -9,10 +9,8 @@ Linux robot is the engine. Built with SwiftUI + Metal, talking to robots over
 rosbridge (WebSocket) — no ROS installation required on your Mac.
 
 > **RDSM Community** is the open-source foundation. The **Pro** edition — listed on the
-> Mac App Store as **Robotics Developer Studio** ($49.99) — adds advanced
-> debugging tools (rosbag record/replay, time-series plotting, parameter profiles,
-> purpose-built inspector visualizations, the immersive TF Universe, message
-> templates, and more).
+> Mac App Store as **[Robotics Developer Studio](https://apps.apple.com/th/app/ros2-studio/id6792280929?mt=12)** — adds future update for advanced
+> debugging tools and capabilities.
 
 ## Features (Community)
 
