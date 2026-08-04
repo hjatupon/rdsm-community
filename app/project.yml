@@ -10,6 +10,11 @@ options:
 settings:
   base:
     PRODUCT_NAME: RDSMCommunity
+    # Dev-only placeholders. Real releases override both at archive time via
+    # `xcodebuild archive` command-line args, computed from Conventional Commits
+    # history by release.yml — never hand-edit these for a release.
+    MARKETING_VERSION: "0.0.0-dev"
+    CURRENT_PROJECT_VERSION: "0"
     SWIFT_VERSION: 6.0
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     ARCHS: "$(ARCHS_STANDARD)"
@@ -84,8 +89,8 @@ targets:
         CFBundleName: "RDSM Community"
         CFBundleDisplayName: RDSM Community
         CFBundleIdentifier: com.jatupon.rdsm.community
-        CFBundleVersion: "10"
-        CFBundleShortVersionString: "1.9"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: YES

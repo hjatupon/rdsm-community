@@ -1,0 +1,28 @@
+name: Lint PR Title
+
+# Enforces Conventional Commits on every PR title. This matters beyond style: since
+# merges are squashed, the PR title becomes the one commit release.yml reads to
+# decide the next version (feat: → minor, fix: → patch, type!: / a "BREAKING
+# CHANGE" footer → major, anything else → no release). A malformed title doesn't
+# error loudly here — it silently produces "nothing to release" on merge — so this
+# check is required (see branch protection) to catch it before merge instead.
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+    branches: [main]
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Conventional Commits format
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          if [[ "$TITLE" =~ ^[a-z]+(\(.+\))?!?:\ .+ ]]; then
+            echo "OK: \"$TITLE\""
+          else
+            echo "::error::PR title must follow Conventional Commits: \"<type>[(scope)][!]: <description>\" (e.g. \"feat: add X\", \"fix: correct Y\", \"chore: update Z\"). Got: \"$TITLE\""
+            exit 1
+          fi

@@ -1,15 +1,16 @@
 name: Release
 
-# Continuous delivery for RDSM Community.
+# Continuous delivery for RDSM Community — pure trunk-based, Conventional Commits.
 #
-# On every push to main (i.e. every merge), read the marketing version from
-# app/project.yml. If a release for that version does not exist yet, build, sign,
-# notarize, staple, and publish it — then GitHub Pages (which points the download
-# button at /releases/latest/download/RDSM-Community.zip) serves it automatically.
+# On every push to main (i.e. every merge), compute the next version from commit
+# history since the last release tag: a `feat:`-titled PR bumps minor, `fix:` bumps
+# patch, `type!:`/a "BREAKING CHANGE" footer bumps major. Anything else (chore/docs/
+# ci/refactor/...) releases nothing — this is the actual gate, not a version field.
+# The version is never stored in the repo; it's injected at archive time only.
 #
-# Merges that do NOT bump the version are a no-op here: the PR compile-check in
-# ci.yml already proved they build. To ship a release, bump
-# CFBundleShortVersionString in app/project.yml and merge.
+# PR titles MUST follow Conventional Commits (enforced by lint-pr-title.yml, a
+# required check) — since merges are squashed, the PR title becomes the one commit
+# this logic reads.
 #
 # Never runs on pull_request, so forked PRs can never reach the signing secrets.
 on:
@@ -31,6 +32,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags — required for git describe/log below
 
       - name: Select Xcode 26.3
         # Match the developer's local toolchain exactly (see ci.yml for why).
@@ -42,17 +45,46 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          VERSION="$(sed -n 's/.*CFBundleShortVersionString:[[:space:]]*"\([^"]*\)".*/\1/p' app/project.yml | head -1)"
-          if [ -z "$VERSION" ]; then
-            echo "::error::Could not read CFBundleShortVersionString from app/project.yml"
-            exit 1
+          LAST_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)"
+          BASE="${LAST_TAG#v}"
+          # Normalize legacy 2-component tags (v1.9) to 3-component (1.9.0).
+          if [[ "$BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then BASE="${BASE}.0"; fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
+
+          BUMP=none
+          BODY="$(git log "${LAST_TAG}..HEAD" --format=%B)"
+          if echo "$BODY" | grep -q "BREAKING CHANGE"; then
+            BUMP=major
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VERSION" >/dev/null 2>&1; then
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            if [[ "$subject" =~ ^[a-z]+(\(.+\))?!: ]]; then
+              BUMP=major
+            elif [[ "$subject" =~ ^feat(\(.+\))?: ]] && [ "$BUMP" != major ]; then
+              BUMP=minor
+            elif [[ "$subject" =~ ^fix(\(.+\))?: ]] && [ "$BUMP" = none ]; then
+              BUMP=patch
+            fi
+          done < <(git log "${LAST_TAG}..HEAD" --format=%s)
+
+          case "$BUMP" in
+            major) VERSION="$((MAJOR+1)).0.0" ;;
+            minor) VERSION="${MAJOR}.$((MINOR+1)).0" ;;
+            patch) VERSION="${MAJOR}.${MINOR}.$((PATCH+1))" ;;
+            none)  VERSION="" ;;
+          esac
+
+          if [ -z "$VERSION" ]; then
+            echo "No feat/fix commits since ${LAST_TAG} — nothing to release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "v$VERSION" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists — skipping publish."
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Version v$VERSION is new — will build and publish."
+            echo "Bump: $BUMP → v$VERSION (since ${LAST_TAG})"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -96,12 +128,18 @@ jobs:
         working-directory: app
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          BUILD: ${{ steps.gate.outputs.build }}
         run: |
           set -euo pipefail
           # Signing is pinned explicitly here as well as in project.yml's Release
           # config, so a future edit to project.yml can't silently switch CI to
           # Automatic signing (which fails on a headless runner with no Xcode
           # account). Developer ID needs no provisioning profile.
+          # MARKETING_VERSION/CURRENT_PROJECT_VERSION are plain Info.plist
+          # substitution settings (no signing semantics) — safe to override here on
+          # the command line, unlike CODE_SIGN_*/PROVISIONING_PROFILE_SPECIFIER
+          # which apply to every target in the graph including SPM libraries.
           xcodebuild archive \
             -project RDSMCommunity.xcodeproj \
             -scheme RDSMCommunity \
@@ -110,7 +148,9 @@ jobs:
             -destination 'generic/platform=macOS' \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Developer ID Application"
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD"
 
       - name: Upload dSYMs
         if: steps.gate.outputs.should_release == 'true'
