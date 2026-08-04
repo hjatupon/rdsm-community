@@ -213,6 +213,32 @@ public final class Viewer3DViewModel {
         layerSubscribeTime.removeAll()
     }
 
+    /// Shared implementation for the repeated "enter the `store` actor, subscribe,
+    /// then `for await` the payload stream" pattern used by every message-type
+    /// subscriber below. Centralizing it means the compiler generates the
+    /// actor-hop/Task glue once instead of once per message type — every one of
+    /// these was previously a separately-compiled but byte-for-byte structurally
+    /// identical `Task { [weak self] in ... }` closure.
+    private func subscribeStream(
+        topic: String,
+        reportsError: Bool = false,
+        handler: @escaping @Sendable (Data) async -> Void
+    ) -> Task<Void, Never> {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let raw = try await self.store.subscribePayload(topic)
+                for await stamped in raw {
+                    await handler(stamped.value)
+                }
+            } catch {
+                if reportsError {
+                    await MainActor.run { self.subscriptionError = error.localizedDescription }
+                }
+            }
+        }
+    }
+
     /// Push robot model layer settings (opacity, tint, hidden links) to the renderer.
     private func applyRobotModelLayerSettings(_ layers: [DisplayLayer]) {
         guard let rmr = robotRenderer,
@@ -249,17 +275,8 @@ public final class Viewer3DViewModel {
 
     private func subscribeLaserScan(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handleLaserScan(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handleLaserScan(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -441,17 +458,8 @@ public final class Viewer3DViewModel {
 
     private func subscribePointCloud(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handlePointCloud(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handlePointCloud(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -615,17 +623,8 @@ public final class Viewer3DViewModel {
 
     private func subscribeOccupancyGrid(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handleOccupancyGrid(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handleOccupancyGrid(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -776,17 +775,8 @@ public final class Viewer3DViewModel {
 
     private func subscribeOctomap(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handleOctomap(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handleOctomap(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -1033,17 +1023,8 @@ public final class Viewer3DViewModel {
 
     private func subscribeOdometry(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handleOdometry(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handleOdometry(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -1071,17 +1052,8 @@ public final class Viewer3DViewModel {
 
     private func subscribePoseStamped(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handlePoseStamped(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handlePoseStamped(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -1165,17 +1137,8 @@ public final class Viewer3DViewModel {
 
     private func subscribeMarkerArray(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handleMarkerArray(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handleMarkerArray(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -1245,17 +1208,8 @@ public final class Viewer3DViewModel {
 
     private func subscribePath(_ layer: DisplayLayer) {
         let layerID = layer.id
-        let topic = layer.topic
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(topic)
-                for await stamped in raw {
-                    await self.handlePath(stamped.value, layerID: layerID)
-                }
-            } catch {
-                await MainActor.run { self.subscriptionError = error.localizedDescription }
-            }
+        let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
+            await self?.handlePath(data, layerID: layerID)
         }
         subscriptionTasks.append(task)
     }
@@ -1327,27 +1281,17 @@ public final class Viewer3DViewModel {
     // MARK: - Image / CompressedImage
 
     private func subscribeImage(_ layer: DisplayLayer) {
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(layer.topic)
-                for await stamped in raw {
-                    await self.handleImage(stamped.value, topic: layer.topic)
-                }
-            } catch { }
+        let topic = layer.topic
+        let task = subscribeStream(topic: topic) { [weak self] data in
+            await self?.handleImage(data, topic: topic)
         }
         subscriptionTasks.append(task)
     }
 
     private func subscribeCompressedImage(_ layer: DisplayLayer) {
-        let task = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload(layer.topic)
-                for await stamped in raw {
-                    await self.handleCompressedImage(stamped.value, topic: layer.topic)
-                }
-            } catch { }
+        let topic = layer.topic
+        let task = subscribeStream(topic: topic) { [weak self] data in
+            await self?.handleCompressedImage(data, topic: topic)
         }
         subscriptionTasks.append(task)
     }
@@ -1394,17 +1338,10 @@ public final class Viewer3DViewModel {
     /// Subscribes to /joint_states so the robot model updates pose in real time.
     /// The visual rendering is handled by RobotModelMetalView driven by `robotModelLayerVisible`.
     private func subscribeRobotModel(_ layer: DisplayLayer) {
-        // Joint state subscription
-        let jointTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let raw = try await store.subscribePayload("/joint_states")
-                for await stamped in raw {
-                    await self.handleJointStates(stamped.value)
-                }
-            } catch {
-                // /joint_states may not exist for all robots — fail silently
-            }
+        // Joint state subscription. /joint_states may not exist for all robots —
+        // subscribeStream fails silently (reportsError defaults to false).
+        let jointTask = subscribeStream(topic: "/joint_states") { [weak self] data in
+            await self?.handleJointStates(data)
         }
         subscriptionTasks.append(jointTask)
 
