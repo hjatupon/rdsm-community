@@ -147,14 +147,20 @@ public struct InspectorView<TFContent: View>: View {
 
             Spacer()
 
-            // Visual / Raw toggle — always shown (B3-14)
-            Picker("View mode", selection: $showRaw) {
-                Text("Visual").tag(false)
-                Text("Raw").tag(true)
+            // Visual / Raw toggle. In the free build, "Visual" only differs from "Raw"
+            // for TF Tree (the one specialized view Community ships) — every other
+            // schema falls back to the same raw JSON tree either way (see `content`
+            // below), so the toggle would just be a control that visibly does
+            // nothing. Only show it where it actually changes what's displayed.
+            if viewModel.renderKind == .tfTree {
+                Picker("View mode", selection: $showRaw) {
+                    Text("Visual").tag(false)
+                    Text("Raw").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .help("Switch between the specialized visualization and raw JSON data")
             }
-            .pickerStyle(.segmented)
-            .fixedSize()
-            .help("Switch between the specialized visualization and raw JSON data")
 
             // Reset
             Button("Reset") { viewModel.resetThrottling() }

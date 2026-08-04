@@ -84,8 +84,8 @@ targets:
         CFBundleName: "RDSM Community"
         CFBundleDisplayName: RDSM Community
         CFBundleIdentifier: com.jatupon.rdsm.community
-        CFBundleVersion: "8"
-        CFBundleShortVersionString: "1.7"
+        CFBundleVersion: "9"
+        CFBundleShortVersionString: "1.8"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: YES
