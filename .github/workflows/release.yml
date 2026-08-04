@@ -53,7 +53,12 @@ jobs:
 
           BUMP=none
           BODY="$(git log "${LAST_TAG}..HEAD" --format=%B)"
-          if echo "$BODY" | grep -q "BREAKING CHANGE"; then
+          # Anchored to a real Conventional Commits footer line, not a substring
+          # match anywhere in the body — a bare `grep -q "BREAKING CHANGE"` false-
+          # positived on this exact commit, whose body *explains* the mechanism
+          # ("...a BREAKING CHANGE footer...") without being one, and shipped a
+          # bogus v2.0.0 release. Confirmed and fixed after the fact.
+          if echo "$BODY" | grep -qE "^BREAKING CHANGE:"; then
             BUMP=major
           fi
           while IFS= read -r subject; do
