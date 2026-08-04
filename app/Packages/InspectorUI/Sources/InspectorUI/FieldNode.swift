@@ -59,8 +59,23 @@ public final class FieldNode: Identifiable, Sendable {
             if arr.isEmpty {
                 return FieldNode(key: key, displayValue: "[]", parentId: parentId)
             }
-            let kids = arr.enumerated().map { i, v in
+            // Cap how many elements become individual FieldNode instances. Raw
+            // binary arrays (PointCloud2/LaserScan/OccupancyGrid data fields) can
+            // have tens of thousands of elements — nobody scrolls through 50,000
+            // rows in a JSON tree, and rebuilding that many class instances on
+            // every incoming message is real allocator churn (implicated in an
+            // EXC_BAD_ACCESS crash observed while Inspector was open on such a
+            // topic). Summary stats below still cover the full array.
+            let displayLimit = 500
+            let isTruncated = arr.count > displayLimit
+            var kids = arr.prefix(displayLimit).enumerated().map { i, v in
                 FieldNode.from(key: "[\(i)]", value: v, parentId: nodeId)
+            }
+            if isTruncated {
+                kids.append(FieldNode(
+                    key: "…",
+                    displayValue: "\(arr.count - displayLimit) more items not shown",
+                    parentId: nodeId))
             }
             let displayVal = "[\(arr.count)]"
             // Compute numeric summary for large arrays
