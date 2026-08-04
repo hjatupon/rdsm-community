@@ -71,41 +71,60 @@ working inside a package.
 
 ## Dev workflow — shipping a change (read this before starting work)
 
-Follow these steps in order for **any** change that should reach both Community and the
-paid Pro edition. Do not skip the version bump — without it nothing releases and Pro
-never finds out this change exists.
+**Pure trunk-based, Conventional Commits.** There is no version field to bump and no
+separate "ship it now" step — the PR title you write **is** the release decision.
 
 1. Branch off `main`, implement, build/test locally (see "Build & run" above).
-2. Open a PR. `ci.yml` must pass (compile check) — `main` is protected, no direct pushes.
-3. Merge the PR. **This alone ships nothing.** `release.yml` only runs the actual
-   release when the merged `app/project.yml` also bumped
-   `CFBundleShortVersionString` — otherwise it's a silent no-op.
-4. When ready to actually release (can be the same PR, or a separate later one that
-   only bumps the version): bump `CFBundleShortVersionString` in `app/project.yml`
-   and merge. This triggers `release.yml`, which builds, signs, notarizes, and
-   publishes the new version — Community users get it immediately via the website's
+2. Open a PR with a **Conventional Commits title**: `feat: ...` (new capability),
+   `fix: ...` (bug fix), `chore:`/`docs:`/`ci:`/`refactor:`/... (anything that
+   shouldn't itself trigger a release), or `feat!:`/`fix!:` plus a `BREAKING
+   CHANGE:` footer for a breaking change. **This is required, not a suggestion** —
+   `lint-pr-title.yml` is a required check that blocks merge on a malformed title
+   (confirmed: a non-conventional title fails the check and GitHub refuses the
+   merge). Since merges are squashed, this title becomes the one commit
+   `release.yml` reads.
+3. `ci.yml` (compile check) must also pass — `main` is protected, no direct pushes,
+   both checks required.
+4. Merge. `release.yml` computes the next version from every commit since the last
+   tag: any `feat:` → minor bump, `fix:` (and no `feat:`) → patch bump, a `!`/
+   `BREAKING CHANGE:` footer → major bump, anything else → **no release, silently
+   correct, not a failure**. A qualifying merge builds, signs, notarizes, and
+   publishes automatically — Community users get it immediately via the website's
    download link.
 5. **From here, everything is automatic** — you do not need to do anything in the
-   Pro repo. The release step above fires a downstream notification; the Pro repo
-   picks it up, re-pins its dependency to this new version, rebuilds, and publishes
-   its own signed release. See Pro's `CLAUDE.md` for that half of the pipeline, and
-   its `ship-rdsm-pro` skill for the final App Store submission step.
+   Pro repo. A real release fires a downstream notification; the Pro repo picks it
+   up, re-pins its dependency to the new commit, rebuilds, and publishes its own
+   signed release (a sync-only merge carries Pro's own version forward unchanged
+   but still ships a new build — see Pro's `CLAUDE.md`). Non-releasing merges
+   (`chore:`/`docs:`/...) don't notify Pro either, correctly — nothing shippable
+   happened.
 
-Batch small PRs without releasing (steps 1–3 only) until you're actually ready for
-both editions to receive the change — the version bump in step 4 is the deliberate
-"ship it now" trigger, not something to do reflexively on every merge.
+Batch as many `chore:`/`docs:`/non-releasing merges as you want with zero
+consequence — nothing ships until a `feat:`/`fix:`/breaking-change title lands.
+That title *is* the trigger; there's no separate step to remember.
+
+**One real failure mode already hit and fixed, worth knowing:** the breaking-change
+footer check must be anchored to a real `^BREAKING CHANGE:` line — an earlier
+unanchored substring match false-positived on a commit body that merely
+*mentioned* the words "BREAKING CHANGE" while explaining this mechanism, and
+shipped a bogus major release (caught and deleted). If a release ever fires with
+an unexpectedly major bump, check the gate step's `git log` output first.
 
 ## CI/CD
 
 - **`.github/workflows/ci.yml`** — compile-check on every PR (macos-26 / Xcode 26.3).
-  `main` is a protected branch requiring this check + a PR (no direct pushes, even from
-  Actions, without repo-admin bypass).
-- **`.github/workflows/release.yml`** — on every push to `main`, reads
-  `CFBundleShortVersionString` from `app/project.yml`; if a GitHub Release for that
-  version doesn't exist yet, archives, signs with Developer ID, notarizes + staples,
-  and publishes it (the app's direct-download `.zip`, served via the website's
-  `/releases/latest/download` link). A merge that doesn't bump the version is a no-op
-  here — bump the version and merge to cut a release.
+  Required status check.
+- **`.github/workflows/lint-pr-title.yml`** — Conventional Commits format check on
+  every PR title. Required status check. Both this and `build` gate merges into the
+  protected `main` (no direct pushes, even from Actions, without repo-admin bypass).
+- **`.github/workflows/release.yml`** — on every push to `main`, computes the next
+  version from Conventional Commits history since the last tag (see "Dev workflow"
+  above for the exact rule) — the version is **not** read from `app/project.yml`,
+  which only carries dev-placeholder `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`
+  base settings. If a bump qualifies, archives, signs with Developer ID, notarizes +
+  staples, and publishes it (the app's direct-download `.zip`, served via the
+  website's `/releases/latest/download` link), with the real version injected only
+  at archive time via `xcodebuild` command-line overrides.
 - **Downstream notification (optional, generic by design):** after a successful
   release, a step fires a `repository_dispatch` if `secrets.DOWNSTREAM_REPO` and
   `secrets.DOWNSTREAM_DISPATCH_TOKEN` are configured — no-op otherwise. Deliberately
