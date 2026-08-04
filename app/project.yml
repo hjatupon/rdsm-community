@@ -70,10 +70,6 @@ packages:
     path: Packages/PublishService
   PublishUI:
     path: Packages/PublishUI
-  ServiceCallService:
-    path: Packages/ServiceCallService
-  ServiceCallUI:
-    path: Packages/ServiceCallUI
 
 targets:
   RDSMCommunity:
@@ -126,8 +122,6 @@ targets:
       - package: RobotModelLoader
       - package: PublishService
       - package: PublishUI
-      - package: ServiceCallService
-      - package: ServiceCallUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jatupon.rdsm.community

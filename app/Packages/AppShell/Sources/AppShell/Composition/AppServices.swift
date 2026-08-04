@@ -17,8 +17,6 @@ import RobotModelLoader
 import URDFParser
 import PublishService
 import Viewer3DUI
-import ServiceCallService
-import ServiceCallUI
 
 /// Single composition root — all Layer 3 actors live here and are injected
 /// downward via protocol-typed arguments.
@@ -43,16 +41,6 @@ public final class AppServices: ObservableObject {
     /// Last 3 distinct connections the user successfully connected to (MRU order).
     @Published var recentConnections: [RecentConnection] = []
 
-    /// Current session mode — live robot connection or rosbag replay.
-    /// Restored from UserDefaults on launch; persists across app restarts.
-    @Published var sessionMode: SessionMode = {
-        if let raw = UserDefaults.standard.string(forKey: "lastSessionMode"),
-           let mode = SessionMode(rawValue: raw) {
-            return mode
-        }
-        return .live
-    }()
-
     /// Active TopicStore for the current session.
     @Published public var activeTopicStore: TopicStore?
     @Published var activeTFTree: TFTree?
@@ -60,14 +48,6 @@ public final class AppServices: ObservableObject {
     @Published var activeLaserScanTopics: [String] = []
     /// All topics available in the current session.
     @Published public var availableTopics: [TopicDescriptor] = []
-    /// Whether a rosbag replay session is currently active (drives replay UI).
-    /// The concrete replay adapter is owned by the Pro rosbag feature.
-    @Published var isReplayActive: Bool = false
-    /// URL of the currently loaded rosbag file (for UI display).
-    @Published var replayBagURL: URL?
-    /// Bumped every time a new replay session starts. Observers use this instead
-    /// of an equality check so a second file drop always triggers a load.
-    @Published var replaySessionID: UUID = UUID()
 
     // MARK: - Logs (/rosout)
     @Published var activeLogStore: LogStore?
@@ -103,10 +83,6 @@ public final class AppServices: ObservableObject {
     // MARK: - Publish (write-path)
     @Published var activePublishService: PublishService?
     @Published var serverSupportsPublish: Bool = false
-
-    // MARK: - Service Call
-    @Published var activeServiceCallService: ServiceCallService?
-    @Published var serviceCallViewModel: ServiceCallViewModel?
 
     // MARK: - Active connection handles (drives ConnectionView sidebar list)
     @Published public var activeConnectionHandles: [ConnectionHandle] = []
@@ -201,8 +177,6 @@ public final class AppServices: ObservableObject {
                 let tfTree = TFTree(historyDuration: tfHistorySec)
                 activeTopicStore = store
                 activeTFTree = tfTree
-                isReplayActive = false
-                sessionMode = .live
 
                 // Load per-profile 3D viewer config (layers + camera + fixed frame).
                 // Key by name+URL (not .id) because ConnectionProfile gets a fresh UUID on
@@ -233,13 +207,6 @@ public final class AppServices: ObservableObject {
                 let caps = await first.transport.serverCapabilities()
                 serverSupportsPublish = caps.contains("clientPublish")
 
-                // Service Call
-                let serviceCallSvc = ServiceCallService(transport: first.transport)
-                activeServiceCallService = serviceCallSvc
-                let scvm = ServiceCallViewModel(service: serviceCallSvc)
-                serviceCallViewModel = scvm
-                scvm.refreshServices()
-
                 // Discover point-cloud and laser-scan topics from live session
                 if let topics = try? await store.availableTopics() {
                     availableTopics = topics
@@ -250,7 +217,7 @@ public final class AppServices: ObservableObject {
                         .filter { $0.schemaName.contains("LaserScan") }
                         .map { $0.name }
                     // Notify Pro features (Plot, Recording, …) that a live session started.
-                    ProUIRegistry.shared.notifySessionDidStart(store: store, topics: availableTopics, mode: .live)
+                    ProUIRegistry.shared.notifySessionDidStart(store: store, topics: availableTopics)
                 }
 
                 // Restore a previously saved URDF file — persists per connection profile
@@ -278,9 +245,7 @@ public final class AppServices: ObservableObject {
                 // Refresh available frames periodically while connected
                 startFrameRefresh(tfTree: tfTree)
             } else {
-                if !isReplayActive {
-                    tearDownSession()
-                }
+                tearDownSession()
             }
         }
     }
@@ -322,17 +287,13 @@ public final class AppServices: ObservableObject {
     private func tearDownSession() {
         // Persist current 3D viewer config before clearing state.
         saveViewer3DConfig()
-        replayBagURL = nil
 
         // Notify Pro features (Plot, Recording, …) that the session is ending.
         // The Recording feature stops any active recording via this callback.
         ProUIRegistry.shared.notifySessionWillEnd()
-        isReplayActive = false
 
         Task { [logs = activeLogStore] in await logs?.stop() }
         Task { [publish = activePublishService] in await publish?.reset() }
-        activeServiceCallService = nil
-        serviceCallViewModel = nil
         activeTopicStore = nil
         activeTFTree = nil
         activePointCloudTopics = []
@@ -359,36 +320,12 @@ public final class AppServices: ObservableObject {
         for handle in handles {
             try? await connectionManager.disconnect(handle)
         }
-        // Also tear down replay sessions which don't go through ConnectionManager.
         if activeTopicStore != nil {
             tearDownSession()
             selection.select(nil)
         }
         if hadConnections {
             toasts.show(.success, title: "Disconnected")
-        }
-    }
-
-    // MARK: - Mode switching
-
-    /// Switch the top-level session mode. Tears down any active session in the
-    /// previous mode and transitions to the new mode's initial state.
-    func setMode(_ mode: SessionMode) {
-        guard mode != sessionMode else { return }
-        sessionMode = mode
-        UserDefaults.standard.set(mode.rawValue, forKey: "lastSessionMode")
-
-        switch mode {
-        case .live:
-            if activeTopicStore != nil {
-                tearDownSession()
-                selection.select(nil)
-            }
-            toasts.show(.info, title: "Live Mode",
-                        message: "Connect to a ROS2 robot via rosbridge.")
-
-        case .replay:
-            Task { await disconnectAll() }
         }
     }
 
@@ -569,62 +506,6 @@ public final class AppServices: ObservableObject {
 
     func resetCameraFromMenu() {
         NotificationCenter.default.post(name: Notification.Name("com.jatupon.ros2studio.resetCamera"), object: nil)
-    }
-
-    // MARK: - Replay session install (transport-agnostic; core)
-
-    /// Installs an already-connected replay transport as the active session.
-    /// The concrete MCAP adapter is created by the Pro rosbag feature and passed
-    /// in here as a plain `TransportClient`, so this method stays Pro-free.
-    public func beginReplaySession(transport: any TransportClient, bagURL: URL) async throws {
-        // Disconnect any active live connections
-        let handles = await connectionManager.activeHandles
-        for handle in handles {
-            try? await connectionManager.disconnect(handle)
-        }
-
-        // Clean up any existing session
-        tearDownSession()
-
-        let cacheCapacity = { let v = UserDefaults.standard.integer(forKey: "perf.topicCacheCapacity"); return v > 0 ? v : 1024 }()
-        let tfHistorySec  = { let v = UserDefaults.standard.double(forKey: "perf.tfHistoryDurationSec");  return v > 0 ? v : 10.0 }()
-        let store = TopicStore(transport: transport, registry: registry, cacheCapacity: cacheCapacity)
-        let tfTree = TFTree(historyDuration: tfHistorySec)
-        let topics = (try? await store.availableTopics()) ?? []
-        isReplayActive = true
-        replaySessionID = UUID()  // bump so MainWindow's .onChange fires for every new load
-        activeTopicStore = store
-        activeTFTree = tfTree
-        availableTopics = topics
-        activePointCloudTopics = topics.filter { $0.schemaName.contains("PointCloud") }.map { $0.name }
-        activeLaserScanTopics  = topics.filter { $0.schemaName.contains("LaserScan") }.map  { $0.name }
-        replayBagURL = bagURL
-
-        // Clear profile tracking so replay doesn't corrupt any live profile's saved config.
-        activeProfileID = nil
-        viewer3DLayers = []
-
-        // Notify Pro features (Plot, …) that a replay session started.
-        ProUIRegistry.shared.notifySessionDidStart(store: store, topics: topics, mode: .replay)
-
-        // Watch /robot_description
-        if topics.contains(where: { $0.name == "/robot_description" }) {
-            startRobotDescriptionWatch(store: store)
-        }
-
-        // Feed /tf and /tf_static into the TFTree actor
-        startTFSubscription(store: store, tfTree: tfTree)
-
-        // Refresh available frames periodically while connected
-        startFrameRefresh(tfTree: tfTree)
-
-        // Logs
-        let logCap = { let v = UserDefaults.standard.integer(forKey: "perf.logCapacity"); return v > 0 ? v : 5000 }()
-        let logs = LogStore(topicStore: store, capacity: logCap)
-        activeLogStore = logs
-        await logs.start()
-
-        sessionMode = .replay
     }
 
 }

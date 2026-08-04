@@ -17,8 +17,6 @@ import PublishService
 import MetalCore
 import RobotModelRenderer
 import MeshLoader
-import ServiceCallService
-import ServiceCallUI
 
 /// Two-column layout: 3D Viewer | Inspector (with topic picker)
 /// Connection management lives in a top-center toolbar control (Xcode scheme-selector style).
@@ -38,18 +36,14 @@ private enum RightPanelTab: String, CaseIterable {
     case inspector = "Inspector"
     case parameters = "Parameters"
     case tfTree = "TF Tree"
-    case monitor = "Monitor"
     case plot = "Plot"
-    case services = "Services"
 
     var displayName: String {
         switch self {
         case .inspector:  return "Inspector"
         case .parameters: return "Parameters"
         case .tfTree:     return "TF Tree"
-        case .monitor:    return "Monitor"
         case .plot:       return "Plot"
-        case .services:   return "Services"
         }
     }
 
@@ -59,9 +53,7 @@ private enum RightPanelTab: String, CaseIterable {
         case .inspector:  return RightPanelTabID.inspector
         case .parameters: return RightPanelTabID.parameters
         case .tfTree:     return RightPanelTabID.tfTree
-        case .monitor:    return RightPanelTabID.monitor
         case .plot:       return RightPanelTabID.plot
-        case .services:   return RightPanelTabID.services
         }
     }
 
@@ -72,20 +64,9 @@ private enum RightPanelTab: String, CaseIterable {
     }
 
     @MainActor
-    static func allCases(for mode: SessionMode) -> [RightPanelTab] {
-        let base: [RightPanelTab]
-        switch mode {
-        case .live:   base = [.inspector, .parameters, .tfTree, .monitor, .plot, .services]
-        case .replay: base = [.inspector, .tfTree, .monitor, .plot]
-        }
-        return base.filter { tab in
-            // Community hides the Services tab and the Monitor (performance) tab.
-            switch tab {
-            case .services where !AppCapabilities.shared.servicesEnabled:      return false
-            case .monitor   where !AppCapabilities.shared.performanceToolsEnabled: return false
-            default: break
-            }
-            return tab.isProInjected ? ProUIRegistry.shared.hasPanel(id: tab.id) : true
+    static var visibleCases: [RightPanelTab] {
+        allCases.filter { tab in
+            tab.isProInjected ? ProUIRegistry.shared.hasPanel(id: tab.id) : true
         }
     }
 }
@@ -140,10 +121,7 @@ private struct MainWindowBody: View {
     @ObservedObject var services: AppServices
     @ObservedObject var selection: SelectionStore
     @ObservedObject var toasts: ToastCenter
-    @Environment(PerformanceStore.self) private var performance
-    @Environment(PerformanceDashboard.self) private var dashboard
     @State private var showingMeshFolderPicker = false
-    @State private var showPerfPanel = false
     @State private var selectedRightTab: RightPanelTab = .inspector
     @State private var showPublishSheet = false
     @State private var selectedFrameName: String?
@@ -151,7 +129,6 @@ private struct MainWindowBody: View {
     @StateObject private var publishFormState = PublishFormState()
     /// Controls the "New Connection" sheet triggered by the toolbar connection control.
     @State private var showingNewConnectionSheet = false
-    @State private var showBagManager = false
     /// Tracks whether the popover topic picker is open in the Inspector panel.
     @State private var showTopicPicker = false
     private var selectionBinding: Binding<TopicDescriptor?> {
@@ -168,15 +145,6 @@ private struct MainWindowBody: View {
     private var toastOverlay: some View {
         ToastStack(center: services.toasts)
             .allowsHitTesting(true)
-    }
-
-    @ViewBuilder
-    private var replayBottomBar: some View {
-        if services.sessionMode == .replay {
-            if let bar = ProUIRegistry.shared.makeReplayBar(services: services) {
-                bar
-            }
-        }
     }
 
     private var layoutBody: some View {
@@ -198,15 +166,7 @@ private struct MainWindowBody: View {
 
     private var handlersPart1: some View {
         layoutBody
-            .onChange(of: services.sessionMode) { _, newMode in
-            if newMode == .replay, (selectedRightTab == .parameters || selectedRightTab == .services) {
-                selectedRightTab = .inspector
-            }
-            if newMode == .live, services.activeConnectionHandles.isEmpty {
-                showingNewConnectionSheet = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("com.jatupon.ros2studio.openPanel"))) { notif in
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("com.jatupon.ros2studio.openPanel"))) { notif in
             guard let panel = notif.object as? String else { return }
             switch panel {
             case "logs": break
@@ -216,13 +176,10 @@ private struct MainWindowBody: View {
                 if let tfTopic = tfTopics.first(where: { $0.name == "/tf" }) ?? tfTopics.first {
                     services.selection.select(tfTopic)
                 }
-            case "rosbag": openRosbagPanel()
             case "inspector":
                 selectedRightTab = .inspector
             case "parameters":
                 selectedRightTab = .parameters
-            case "monitor":
-                selectedRightTab = .monitor
             case "publish":
                 showPublishSheet = true
             case "3d_viewer": break
@@ -232,23 +189,12 @@ private struct MainWindowBody: View {
         .onReceive(NotificationCenter.default.publisher(
             for: Notification.Name("com.jatupon.ros2studio.focusNewConnection")
         )) { _ in
-            if services.sessionMode == .replay {
-                services.setMode(.live)
-            }
             showingNewConnectionSheet = true
         }
     }
 
     private var handlersPart2: some View {
         handlersPart1
-        .onReceive(NotificationCenter.default.publisher(
-            for: Notification.Name("com.jatupon.ros2studio.openRosbag")
-        )) { _ in
-            if services.sessionMode == .live {
-                services.setMode(.replay)
-            }
-            openRosbagPanel()
-        }
         .onReceive(NotificationCenter.default.publisher(
             for: Notification.Name("com.jatupon.ros2studio.tfUniverseRequested"))) { _ in
             selectedRightTab = .tfTree
@@ -268,11 +214,6 @@ private struct MainWindowBody: View {
         handlersPart2
         .onReceive(NotificationCenter.default.publisher(for: .frameInspectorClear)) { _ in
             selectedFrameName = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(
-            for: Notification.Name("com.jatupon.ros2studio.openBagManager")
-        )) { _ in
-            showBagManager = true
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("com.jatupon.ros2studio.publishResult"))) { notif in
             guard let info = notif.userInfo else { return }
@@ -294,13 +235,6 @@ private struct MainWindowBody: View {
             if case .success(let url) = result {
                 services.userMeshRoot = url
                 services.toasts.show(.info, title: "Mesh folder set", message: url.lastPathComponent)
-            }
-        }
-        .sheet(isPresented: $showBagManager) {
-            let host = services.activeConnectionHandles.first?.profile.url.host ?? "localhost"
-            if let manager = ProUIRegistry.shared.makeBagManager(
-                host: host, services: services, onDismiss: { showBagManager = false }) {
-                manager
             }
         }
         .sheet(isPresented: $showPublishSheet) {
@@ -343,47 +277,8 @@ private struct MainWindowBody: View {
 
     var body: some View {
         mainBody
-            .overlay(alignment: .bottom) {
-                if AppCapabilities.shared.performanceToolsEnabled, showPerfPanel {
-                    PerformancePanelView(isPresented: $showPerfPanel)
-                        .environmentObject(services)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
             .toolbar { toolbarItems }
             .overlay(alignment: .topTrailing) { toastOverlay }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    replayBottomBar
-                    // Performance HUD footer — hidden in the Community edition.
-                    if AppCapabilities.shared.performanceToolsEnabled {
-                        PerformanceFooterBar(showPanel: $showPerfPanel)
-                    }
-                }
-            }
-            .task {
-                dashboard.services = services
-            }
-    }
-
-    // MARK: - Rosbag file picker
-
-    private func openRosbagPanel() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "mcap") ?? .data]
-        panel.allowsMultipleSelection = false
-        panel.title = "Open Rosbag (MCAP)"
-        panel.beginSheetModal(for: NSApp.keyWindow ?? NSWindow()) { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in await loadReplaySession(from: url) }
-        }
-    }
-
-    @MainActor
-    private func loadReplaySession(from url: URL) async {
-        // Delegates to the Pro rosbag feature (creates the MCAP adapter, installs
-        // the session, and wires the player). No-op in a build without the feature.
-        await ProUIRegistry.shared.openReplay(url: url, services: services)
     }
 
     // MARK: - 3D Viewer
@@ -412,9 +307,7 @@ private struct MainWindowBody: View {
                             "No logs yet",
                             systemImage: "doc.text.magnifyingglass",
                             description: Text(
-                                services.sessionMode == .replay
-                                    ? "Open an MCAP rosbag file containing /rosout messages."
-                                    : "Connect to a robot to see live /rosout messages."
+                                "Connect to a robot to see live /rosout messages."
                             )
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -549,10 +442,10 @@ private struct MainWindowBody: View {
             externalViewModel: externalViewModel,
             showLayersSidebar: false,
             tfUniverseMode: $tfUniverseMode,
-            lodThreshold: performance.lodThreshold,
-            renderFPS: performance.renderFPS,
-            renderResolution: performance.renderResolution,
-            onFrameDrawn: { [dashboard] in dashboard.recordFrame() })
+            lodThreshold: 500_000,
+            renderFPS: 60,
+            renderResolution: 0.75,
+            onFrameDrawn: { })
     }
 
     @ViewBuilder
@@ -575,9 +468,7 @@ private struct MainWindowBody: View {
                         "No logs yet",
                         systemImage: "doc.text.magnifyingglass",
                         description: Text(
-                            services.sessionMode == .replay
-                                ? "Open an MCAP rosbag file containing /rosout messages."
-                                : "Connect to a robot to see live /rosout messages."
+                            "Connect to a robot to see live /rosout messages."
                         )
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -600,7 +491,7 @@ private struct MainWindowBody: View {
             // keep VoiceOver context while hiding the visual "Panel" text.
             HStack {
                 Picker(selection: $selectedRightTab) {
-                    ForEach(RightPanelTab.allCases(for: services.sessionMode), id: \.self) { tab in
+                    ForEach(RightPanelTab.visibleCases, id: \.self) { tab in
                         Text(tab.displayName).tag(tab)
                     }
                 } label: {
@@ -617,11 +508,7 @@ private struct MainWindowBody: View {
 
             Divider()
 
-            // Monitor tab is always available, regardless of connection state
-            if selectedRightTab == .monitor {
-                MonitoringView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let store = services.activeTopicStore {
+            if let store = services.activeTopicStore {
                 switch selectedRightTab {
                 case .inspector:
                     // Topic picker only shown in Inspector tab — not shared across all tabs
@@ -659,24 +546,8 @@ private struct MainWindowBody: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
 
-                case .monitor:
-                    EmptyView() // handled above
-
                 case .plot:
                     proPanel(.plot, store: store)
-
-                case .services:
-                    if let vm = services.serviceCallViewModel {
-                        ServiceCallView(viewModel: vm)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ContentUnavailableView(
-                            "Services Unavailable",
-                            systemImage: "gear.badge.arrow.up.forward",
-                            description: Text("Connect to a robot to browse and call ROS2 services.")
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
                 }
             } else {
                 disconnectedEmptyState(for: selectedRightTab)
@@ -687,11 +558,7 @@ private struct MainWindowBody: View {
 
     @ViewBuilder
     private func disconnectedEmptyState(for tab: RightPanelTab) -> some View {
-        if services.sessionMode == .replay {
-            replayEmptyState(for: tab)
-        } else {
-            liveEmptyState(for: tab)
-        }
+        liveEmptyState(for: tab)
     }
 
     @ViewBuilder
@@ -718,50 +585,8 @@ private struct MainWindowBody: View {
                 description: Text("Connect to a robot to view the TF transform tree.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .monitor:
-            EmptyView() // handled before this function is called
         case .plot:
             proPanel(.plot, store: nil)
-        case .services:
-            ContentUnavailableView(
-                "No Robot Connected",
-                systemImage: "gear.badge.arrow.up.forward",
-                description: Text("Connect to a robot to browse and call ROS2 services.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-
-    @ViewBuilder
-    private func replayEmptyState(for tab: RightPanelTab) -> some View {
-        switch tab {
-        case .inspector:
-            ContentUnavailableView(
-                "No Rosbag Loaded",
-                systemImage: "film.stack",
-                description: Text("Open an MCAP rosbag file to inspect its topics.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .parameters:
-            ContentUnavailableView(
-                "Not Available in Replay Mode",
-                systemImage: "slider.horizontal.3",
-                description: Text("Parameter editing is only available when connected to a live robot.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .tfTree:
-            ContentUnavailableView(
-                "No Rosbag Loaded",
-                systemImage: "point.3.connected.trianglepath.dotted",
-                description: Text("Open an MCAP rosbag file containing /tf data.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .monitor:
-            EmptyView() // handled before this function is called
-        case .plot:
-            proPanel(.plot, store: nil)
-        case .services:
-            EmptyView() // Services tab is live-only; never appears in replay picker
         }
     }
 
@@ -773,7 +598,7 @@ private struct MainWindowBody: View {
         let context = RightPanelContext(
             services: services,
             store: store,
-            currentBagTimeSec: ProUIRegistry.shared.currentBagTimeSec
+            currentBagTimeSec: 0
         )
         if let view = ProUIRegistry.shared.makePanel(id: tab.id, context: context) {
             view
@@ -868,152 +693,70 @@ private struct MainWindowBody: View {
 
     @ViewBuilder
     private var notConnectedPlaceholder: some View {
-        if services.sessionMode == .replay {
-            VStack(spacing: 20) {
-                Image(systemName: "film.stack")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                Text("\(AppInfo.displayName) — Replay Mode")
-                    .font(.title2.bold())
-                Text("Open an MCAP rosbag file to start replaying recorded sensor data.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
-                Button("Open Rosbag…") {
-                    openRosbagPanel()
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Open Rosbag")
-                .accessibilityHint("Opens the file picker to choose an MCAP rosbag file.")
+        VStack(spacing: 20) {
+            Image(systemName: "cube.transparent")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(AppInfo.displayName)
+                .font(.title2.bold())
+            Text("Connect to a ROS2 robot to start visualizing sensor data.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Button("New Connection…") {
+                showingNewConnectionSheet = true
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(spacing: 20) {
-                Image(systemName: "cube.transparent")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                Text(AppInfo.displayName)
-                    .font(.title2.bold())
-                Text("Connect to a ROS2 robot to start visualizing sensor data.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
-                Button("New Connection…") {
-                    showingNewConnectionSheet = true
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityLabel("New Connection")
-                .accessibilityHint("Opens the new connection form.")
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .buttonStyle(.borderedProminent)
+            .accessibilityLabel("New Connection")
+            .accessibilityHint("Opens the new connection form.")
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        // Left: session mode control (Live / Rosbag Replay). Community is live-only,
-        // so the switch — the entry point into replay — is hidden there.
-        if AppCapabilities.shared.rosbagEnabled {
-            ToolbarItem(placement: .navigation) {
-                SessionModeControl(
-                    currentMode: services.sessionMode,
-                    onSwitch: { services.setMode($0) },
-                    onShowModePicker: nil
-                )
-            }
-        }
-
-        // Center: connection/file status
+        // Center: connection status
         ToolbarItem(placement: .principal) {
-            if services.sessionMode == .live {
-                ConnectionToolbarControl(
-                    activeHandles: services.activeConnectionHandles,
-                    recentConnections: services.recentConnections.map {
-                        RecentConnectionEntry(id: $0.id, name: $0.name, url: $0.url, lastConnectedAt: $0.lastConnectedAt)
-                    },
-                    profileStore: services.profileStore,
-                    connectionManager: services.connectionManager,
-                    onShowNewConnection: { showingNewConnectionSheet = true },
-                    onConnectResult: { ok, info in
-                        if ok {
-                            services.toasts.show(.success, title: "Connected", message: info)
-                        } else {
-                            services.toasts.show(.error, title: "Could not connect", message: info)
-                        }
+            ConnectionToolbarControl(
+                activeHandles: services.activeConnectionHandles,
+                recentConnections: services.recentConnections.map {
+                    RecentConnectionEntry(id: $0.id, name: $0.name, url: $0.url, lastConnectedAt: $0.lastConnectedAt)
+                },
+                profileStore: services.profileStore,
+                connectionManager: services.connectionManager,
+                onShowNewConnection: { showingNewConnectionSheet = true },
+                onConnectResult: { ok, info in
+                    if ok {
+                        services.toasts.show(.success, title: "Connected", message: info)
+                    } else {
+                        services.toasts.show(.error, title: "Could not connect", message: info)
                     }
-                )
-            } else {
-                replayFileIndicator
-            }
-        }
-
-        // Open Rosbag — replay mode only
-        if services.sessionMode == .replay {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    openRosbagPanel()
-                } label: {
-                    Label("Open Rosbag", systemImage: "film.stack")
                 }
-                .help("Open Rosbag (MCAP) file (⌘O)")
-                .accessibilityLabel("Open Rosbag")
-                .accessibilityHint("Choose an MCAP rosbag file to replay.")
-            }
+            )
         }
 
         // Hidden keyboard shortcut to open Publish sheet (cmd+shift+P).
-        // The visible Publish button now lives in the 3D panel's top-right toolbar.
-        if services.sessionMode == .live {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showPublishSheet = true
-                } label: {
-                    EmptyView()
-                }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
-                .opacity(0)
-                .accessibilityHidden(true)
+        // The visible Publish button lives in the 3D panel's top-right toolbar.
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showPublishSheet = true
+            } label: {
+                EmptyView()
             }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .opacity(0)
+            .accessibilityHidden(true)
         }
 
-        // Recording — live mode only, placed on the right side.
-        // REC-002: recordingState is read here so the @ToolbarContentBuilder closure
-        if services.sessionMode == .live {
-            ToolbarItem(placement: .primaryAction) {
-                // Recording is a Pro feature: the toolbar content (and its per-connection
-                // lifecycle) is supplied by the rosbag/recording plugin. Absent in the
-                // free build.
-                if let recordingToolbar = ProUIRegistry.shared.makeRecordingToolbar(services: services) {
-                    recordingToolbar
-                }
+        // Recording is a Pro feature: the toolbar content is supplied by the
+        // rosbag/recording plugin. Absent in the free build.
+        ToolbarItem(placement: .primaryAction) {
+            if let recordingToolbar = ProUIRegistry.shared.makeRecordingToolbar(services: services) {
+                recordingToolbar
             }
         }
-    }
-
-    /// Compact indicator showing the loaded rosbag filename (or hint when empty).
-    private var replayFileIndicator: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "doc.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            if let url = services.replayBagURL {
-                Text(url.lastPathComponent)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } else {
-                Text("No bag loaded")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
-        .fixedSize()
     }
 
 }
