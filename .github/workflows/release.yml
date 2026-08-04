@@ -213,6 +213,26 @@ jobs:
             --notes-file "$NOTES"
           echo "Published v${VERSION} (sha256 ${SHA256})"
 
+      - name: Notify downstream (optional)
+        # Generic by design: no downstream repo name, product name, or edition
+        # appears in this public workflow. If secrets.DOWNSTREAM_REPO isn't
+        # configured, this is a no-op.
+        if: steps.gate.outputs.should_release == 'true'
+        env:
+          DOWNSTREAM_REPO: ${{ secrets.DOWNSTREAM_REPO }}
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_DISPATCH_TOKEN }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DOWNSTREAM_REPO:-}" ]; then
+            echo "No downstream repo configured — skipping."
+            exit 0
+          fi
+          gh api "repos/$DOWNSTREAM_REPO/dispatches" \
+            -f event_type=upstream-release \
+            -f "client_payload[tag]=v${VERSION}" \
+            -f "client_payload[sha]=$GITHUB_SHA"
+
       - name: Nothing to release
         if: steps.gate.outputs.should_release != 'true'
         run: echo "Version ${{ steps.gate.outputs.version }} is already released. No action."
