@@ -56,7 +56,11 @@ public final class Viewer3DViewModel {
 
     private let store: TopicStore
     private let tfTree: TFTree
-    private var subscriptionTasks: [Task<Void, Never>] = []
+    /// Active subscription tasks, keyed by the layer they belong to (RobotModel has
+    /// two: joint-state + TF tracking). Keying by layer lets `startSubscriptions`
+    /// cancel and restart only the layers that actually changed instead of tearing
+    /// down and recreating every subscription on any layer-list edit.
+    private var subscriptionTasksByLayer: [UUID: [Task<Void, Never>]] = [:]
     /// Per-layer position trail for decay-time aware rendering (Odometry, PoseStamped).
     private var layerTrails: [String: [(timestamp: Date, data: Data)]] = [:]
     /// Current active layers (used by TF-frame refresh).
@@ -160,25 +164,49 @@ public final class Viewer3DViewModel {
         }
     }
 
+    /// Reconciles the active subscriptions with `layers`, touching only what changed.
+    ///
+    /// The previous implementation cancelled every subscription task and recreated
+    /// all of them on any layer-list edit — adding a second topic while a first was
+    /// already streaming would cancel the first's in-flight task and immediately
+    /// spawn a replacement for the exact same topic. That churn was implicated in a
+    /// Task-lifecycle crash (`swift_task_dealloc`) seen repeatedly on Intel. A layer
+    /// that is unchanged between calls now has its running task left completely
+    /// alone — only added, removed, or identity-changed (type/topic) layers cause a
+    /// cancel or a new subscription.
     public func startSubscriptions(layers: [DisplayLayer]) async {
-        // Two call sites request this (initial GPU setup, and layer-list changes) and
-        // can race — e.g. on hardware where GPU setup is slow enough that a manual
-        // layer edit lands first. If the requested set already matches what's active,
-        // this is a redundant call: skip it rather than cancelling and immediately
-        // re-creating in-flight subscriptions for the same topics, which can corrupt
-        // Swift's task bookkeeping (observed as a swift_task_dealloc crash on Intel).
-        guard layers != activeLayers else { return }
-        stopSubscriptions()
-        pointCloudRenderer?.clearAllLayers()
+        let previousByID = Dictionary(uniqueKeysWithValues: activeLayers.map { ($0.id, $0) })
+        let currentByID = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0) })
         activeLayers = layers
         robotModelLayerVisible = layers.contains { $0.type == .robotModel && $0.isVisible }
         applyRobotModelLayerSettings(layers)
-        let now = Date()
-        for layer in layers where layer.isVisible {
-            layerSubscribeTime[layer.id] = now
+
+        // Tear down layers that disappeared, went invisible, or changed identity.
+        for (id, old) in previousByID {
+            let stillSubscribed: Bool
+            if let new = currentByID[id] {
+                stillSubscribed = new.isVisible && new.type == old.type && new.topic == old.topic
+            } else {
+                stillSubscribed = false
+            }
+            guard !stillSubscribed else { continue }
+            cancelSubscription(forLayerID: id)
+            pointCloudRenderer?.clearTopic(id.uuidString)
+            if old.type == .tfFrames {
+                pointCloudRenderer?.clearTopic(id.uuidString + "__tips__")
+            }
         }
 
+        // (Re)subscribe layers that are new, changed identity, or just became visible.
+        // A layer whose type/topic/visibility are all unchanged is skipped entirely —
+        // its existing task keeps running untouched.
+        let now = Date()
         for layer in layers where layer.isVisible {
+            if let old = previousByID[layer.id],
+               old.type == layer.type, old.topic == layer.topic, old.isVisible {
+                continue
+            }
+            layerSubscribeTime[layer.id] = now
             switch layer.type {
             case .laserScan:       subscribeLaserScan(layer)
             case .pointCloud2:     subscribePointCloud(layer)
@@ -204,13 +232,25 @@ public final class Viewer3DViewModel {
         }
     }
 
+    private func cancelSubscription(forLayerID id: UUID) {
+        subscriptionTasksByLayer[id]?.forEach { $0.cancel() }
+        subscriptionTasksByLayer.removeValue(forKey: id)
+        layerTrails.removeValue(forKey: id.uuidString)
+        layerLastReceived.removeValue(forKey: id)
+        layerReceiveTimes.removeValue(forKey: id)
+        layerSubscribeTime.removeValue(forKey: id)
+    }
+
+    /// Full teardown — used when the 3D view itself disappears, not on ordinary
+    /// layer-list edits (see `startSubscriptions`, which now diffs instead).
     public func stopSubscriptions() {
-        subscriptionTasks.forEach { $0.cancel() }
-        subscriptionTasks.removeAll()
+        subscriptionTasksByLayer.values.forEach { tasks in tasks.forEach { $0.cancel() } }
+        subscriptionTasksByLayer.removeAll()
         layerTrails.removeAll()
         layerLastReceived.removeAll()
         layerReceiveTimes.removeAll()
         layerSubscribeTime.removeAll()
+        activeLayers = []
     }
 
     /// Shared implementation for the repeated "enter the `store` actor, subscribe,
@@ -278,7 +318,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handleLaserScan(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func handleLaserScan(_ data: Data, layerID: UUID) async {
@@ -461,7 +501,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handlePointCloud(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func handlePointCloud(_ data: Data, layerID: UUID) async {
@@ -626,7 +666,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handleOccupancyGrid(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     /// Decodes an OccupancyGrid message and uploads it as a quad mesh.
@@ -778,7 +818,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handleOctomap(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     /// Decodes an Octomap message and renders voxels.
@@ -1026,7 +1066,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handleOdometry(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func handleOdometry(_ data: Data, layerID: UUID) async {
@@ -1055,7 +1095,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handlePoseStamped(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func handlePoseStamped(_ data: Data, layerID: UUID) async {
@@ -1140,7 +1180,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handleMarkerArray(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     /// Flattens all markers into a single point cloud. Supports POINTS (8), SPHERE_LIST (7),
@@ -1211,7 +1251,7 @@ public final class Viewer3DViewModel {
         let task = subscribeStream(topic: layer.topic, reportsError: true) { [weak self] data in
             await self?.handlePath(data, layerID: layerID)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     /// Converts a nav_msgs/msg/Path to a dense point strip, rendered as a coloured
@@ -1281,19 +1321,21 @@ public final class Viewer3DViewModel {
     // MARK: - Image / CompressedImage
 
     private func subscribeImage(_ layer: DisplayLayer) {
+        let layerID = layer.id
         let topic = layer.topic
         let task = subscribeStream(topic: topic) { [weak self] data in
             await self?.handleImage(data, topic: topic)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func subscribeCompressedImage(_ layer: DisplayLayer) {
+        let layerID = layer.id
         let topic = layer.topic
         let task = subscribeStream(topic: topic) { [weak self] data in
             await self?.handleCompressedImage(data, topic: topic)
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layerID, default: []].append(task)
     }
 
     private func handleImage(_ data: Data, topic: String) async {
@@ -1343,7 +1385,7 @@ public final class Viewer3DViewModel {
         let jointTask = subscribeStream(topic: "/joint_states") { [weak self] data in
             await self?.handleJointStates(data)
         }
-        subscriptionTasks.append(jointTask)
+        subscriptionTasksByLayer[layer.id, default: []].append(jointTask)
 
         // TF tracking — position the robot in the 3D scene
         let tfTask = Task { [weak self] in
@@ -1362,7 +1404,7 @@ public final class Viewer3DViewModel {
                 try? await Task.sleep(nanoseconds: 50_000_000) // 20 Hz
             }
         }
-        subscriptionTasks.append(tfTask)
+        subscriptionTasksByLayer[layer.id, default: []].append(tfTask)
     }
 
     private func handleJointStates(_ data: Data) async {
@@ -1396,7 +1438,7 @@ public final class Viewer3DViewModel {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 10 Hz
             }
         }
-        subscriptionTasks.append(task)
+        subscriptionTasksByLayer[layer.id, default: []].append(task)
     }
 
     private func handleTFFrames(layerID: String) async {
