@@ -3,21 +3,10 @@ import Transport
 import TopicStore
 import MessageRegistry
 
-/// Type-aware message inspector.
-///
-/// Dispatches to the appropriate sub-view based on the schema name:
-/// - `sensor_msgs/…/Image`        → ``ImageInspectorView``
-/// - `std_msgs/…/Float64` etc.    → ``NumericChartView`` (time-series chart)
-/// - `std_msgs/…/Bool`            → ``BoolIndicatorView``
-/// - `std_msgs/…/String`          → ``StringValueView``
-/// - `rcl_interfaces/…/Log`       → ``LogListView``
-/// - `sensor_msgs/…/Range`        → ``RangeGaugeView``
-/// - `sensor_msgs/…/BatteryState` → ``BatteryStateView``
-/// - `tf2_msgs/…/TFMessage`       → TF tree (via `tfTreeContent` view builder)
-/// - Everything else              → ``JSONTreeView``
+/// Message inspector. Always shows the raw JSON field tree — the free build
+/// registers no specialized per-schema visualizations (those are a paid feature).
 public struct InspectorView<TFContent: View>: View {
     @State private var viewModel: InspectorViewModel
-    @State private var showRaw = false
     @State private var isPinned: Bool = UserDefaults.standard.bool(forKey: "inspector.pinned")
 
     private let topic: TopicDescriptor
@@ -49,24 +38,18 @@ public struct InspectorView<TFContent: View>: View {
         self.tfTreeContent = tfTreeContent
     }
 
-    private var isTFContent: Bool {
-        viewModel.renderKind == .tfTree
-    }
-
     public var body: some View {
         VStack(spacing: 0) {
-            if !isTFContent {
-                header
+            header
+            Divider()
+            throttleBar
+            Divider()
+            // Viz-picker bar is a Pro surface (injected). Absent in the free build.
+            if let bar = VisualizationRegistry.shared.makeVizPickerBar(context: vizPickerBarContext) {
+                bar
                 Divider()
-                throttleBar
-                Divider()
-                // Viz-picker bar is a Pro surface (injected). Absent in the free build.
-                if let bar = VisualizationRegistry.shared.makeVizPickerBar(context: vizPickerBarContext) {
-                    bar
-                    Divider()
-                }
             }
-            content
+            rawView
         }
         .task { await viewModel.startSubscription() }
         .onDisappear { viewModel.stopSubscription() }
@@ -146,21 +129,6 @@ public struct InspectorView<TFContent: View>: View {
             .help("Sample rate: how often the Inspector panel updates. Live = every message.")
 
             Spacer()
-
-            // Visual / Raw toggle. In the free build, "Visual" only differs from "Raw"
-            // for TF Tree (the one specialized view Community ships) — every other
-            // schema falls back to the same raw JSON tree either way (see `content`
-            // below), so the toggle would just be a control that visibly does
-            // nothing. Only show it where it actually changes what's displayed.
-            if viewModel.renderKind == .tfTree {
-                Picker("View mode", selection: $showRaw) {
-                    Text("Visual").tag(false)
-                    Text("Raw").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .help("Switch between the specialized visualization and raw JSON data")
-            }
 
             // Reset
             Button("Reset") { viewModel.resetThrottling() }
@@ -389,94 +357,6 @@ public struct InspectorView<TFContent: View>: View {
         for child in node.children {
             collectArrayIDsInNode(child, into: &ids)
         }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if showRaw {
-            rawView
-        } else if viewModel.renderKind == .tfTree {
-            // Basic TF tree stays in the shell (Core): summary + Open TF Universe + tree.
-            tfTreeVisual
-        } else {
-            // All other visualizations come from the registry. In the free build only
-            // the raw JSON tree is registered, so non-jsonTree kinds fall back to it;
-            // the paid build registers the full purpose-built + generic set.
-            let id = viewModel.vizOverrideID ?? VisualizationRegistry.shared.defaultID(for: topic.schemaName)
-            VisualizationRegistry.shared.makeView(id: id, snapshot: viewModel.snapshotState())
-        }
-    }
-
-    @ViewBuilder
-    private var tfTreeVisual: some View {
-        VStack(spacing: 8) {
-            // Summary card
-            VStack(spacing: 6) {
-                Label("TF Tree", systemImage: "move.3d")
-                    .font(.headline)
-                if viewModel.tfSummary.hasData {
-                    let s = viewModel.tfSummary
-                    HStack {
-                        statBlock("\(s.frameCount)", "Frames")
-                        statBlock("\(s.rootCount)", "Roots")
-                        statBlock("\(s.edgeCount)", "Edges")
-                    }
-                    HStack {
-                        statBlock(String(format: "%.1f Hz", s.avgHz), "Avg Rate")
-                        statBlock("\(s.staleCount)", "Stale")
-                    }
-                    if !s.roots.isEmpty {
-                        Text("Roots: " + s.roots.joined(separator: ", "))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                } else {
-                    Text("Waiting for TF messages…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-
-            // Open TF Universe button
-            Button {
-                NotificationCenter.default.post(
-                    name: Notification.Name("com.jatupon.ros2studio.tfUniverseRequested"), object: nil)
-                NotificationCenter.default.post(
-                    name: Notification.Name("com.jatupon.ros2studio.openPanel"), object: "tf")
-            } label: {
-                Label("Open TF Universe", systemImage: "move.3d")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
-            .controlSize(.large)
-
-            Divider()
-
-            // Existing TF tree content below
-            tfTreeContent()
-                .frame(maxHeight: .infinity)
-        }
-        .padding(8)
-    }
-
-    @ViewBuilder
-    private func statBlock(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 1) {
-            Text(value)
-                .font(.system(.title3, design: .monospaced))
-                .fontWeight(.semibold)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private func placeholder(_ text: String, icon: String) -> some View {
