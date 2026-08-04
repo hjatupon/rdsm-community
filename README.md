@@ -22,7 +22,6 @@ rosbridge (WebSocket) — no ROS installation required on your Mac.
 - **Robot Model** — URDF loading with `package://` mesh resolution
 - **Message Publishing** — String / Twist / TwistStamped / Raw JSON
 - **Nav2 Goal & 2D Pose Estimate** tools (click-drag on the 3D floor)
-- **Service Call UI** — browse and call ROS 2 services
 
 ## Requirements
 
