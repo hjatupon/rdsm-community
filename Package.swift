@@ -29,8 +29,6 @@ let package = Package(
         .library(name: "RobotModelLoader", targets: ["RobotModelLoader"]),
         .library(name: "RobotModelRenderer", targets: ["RobotModelRenderer"]),
         .library(name: "Serialization", targets: ["Serialization"]),
-        .library(name: "ServiceCallService", targets: ["ServiceCallService"]),
-        .library(name: "ServiceCallUI", targets: ["ServiceCallUI"]),
         .library(name: "TFTree", targets: ["TFTree"]),
         .library(name: "TopicBrowserUI", targets: ["TopicBrowserUI"]),
         .library(name: "TopicStore", targets: ["TopicStore"]),
@@ -45,7 +43,7 @@ let package = Package(
     targets: [
         .target(
             name: "AppShell",
-            dependencies: ["Logging", "Transport", "MessageRegistry", "TopicStore", "TFTree", "ConnectionManager", "ConnectionUI", "LayoutEngine", "ProfileStore", "LogStore", "LogViewerUI", "MetalCore", "MeshLoader", "RobotModelCore", "RobotModelLoader", "RobotModelRenderer", "URDFParser", "PublishService", "PublishUI", "TopicBrowserUI", "ServiceCallService", "ServiceCallUI", "InspectorUI", "Viewer3DUI"],
+            dependencies: ["Logging", "Transport", "MessageRegistry", "TopicStore", "TFTree", "ConnectionManager", "ConnectionUI", "LayoutEngine", "ProfileStore", "LogStore", "LogViewerUI", "MetalCore", "MeshLoader", "RobotModelCore", "RobotModelLoader", "RobotModelRenderer", "URDFParser", "PublishService", "PublishUI", "TopicBrowserUI", "InspectorUI", "Viewer3DUI"],
             path: "app/Packages/AppShell/Sources/AppShell",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
@@ -221,24 +219,6 @@ let package = Package(
             name: "Serialization",
             dependencies: ["Logging", .product(name: "SwiftCBOR", package: "SwiftCBOR"), .product(name: "MessagePacker", package: "MessagePacker")],
             path: "app/Packages/Serialization/Sources/Serialization",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .unsafeFlags(["-strict-concurrency=complete"]),
-            ]
-        ),
-        .target(
-            name: "ServiceCallService",
-            dependencies: ["Transport"],
-            path: "app/Packages/ServiceCallService/Sources/ServiceCallService",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .unsafeFlags(["-strict-concurrency=complete"]),
-            ]
-        ),
-        .target(
-            name: "ServiceCallUI",
-            dependencies: ["ServiceCallService", "InspectorUI"],
-            path: "app/Packages/ServiceCallUI/Sources/ServiceCallUI",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .unsafeFlags(["-strict-concurrency=complete"]),

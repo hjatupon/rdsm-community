@@ -26,8 +26,8 @@ public enum AppPaths {
 /// (`AppServices`) importing any Pro package.
 @MainActor
 public protocol SessionLifecycleObserver: AnyObject {
-    /// A live or replay session became active with the given topic store.
-    func sessionDidStart(store: TopicStore, topics: [TopicDescriptor], mode: SessionMode)
+    /// A live session became active with the given topic store.
+    func sessionDidStart(store: TopicStore, topics: [TopicDescriptor])
     /// The active session is being torn down.
     func sessionWillEnd()
 }
@@ -113,8 +113,8 @@ public final class ProUIRegistry {
         sessionObservers.append(observer)
     }
 
-    public func notifySessionDidStart(store: TopicStore, topics: [TopicDescriptor], mode: SessionMode) {
-        sessionObservers.forEach { $0.sessionDidStart(store: store, topics: topics, mode: mode) }
+    public func notifySessionDidStart(store: TopicStore, topics: [TopicDescriptor]) {
+        sessionObservers.forEach { $0.sessionDidStart(store: store, topics: topics) }
     }
 
     public func notifySessionWillEnd() {
@@ -132,28 +132,6 @@ public final class ProUIRegistry {
     public func makePublishSheet(context: PublishSheetContext) -> AnyView? {
         publishSheetBuilder?(context)
     }
-
-    // MARK: - Rosbag replay (bottom bar, bag manager, open flow)
-
-    private var replayBarBuilder: (@MainActor (AppServices) -> AnyView)?
-    private var bagManagerBuilder: (@MainActor (_ host: String, _ services: AppServices, _ onDismiss: @escaping () -> Void) -> AnyView)?
-    private var replayOpener: (@MainActor (_ url: URL, _ services: AppServices) async -> Void)?
-    /// Provider for the current replay position in seconds (for time-synced panels).
-    private var replayTimeProvider: (@MainActor () -> Double)?
-
-    public func registerReplayBar(_ build: @escaping @MainActor (AppServices) -> AnyView) { replayBarBuilder = build }
-    public func makeReplayBar(services: AppServices) -> AnyView? { replayBarBuilder?(services) }
-
-    public func registerBagManager(_ build: @escaping @MainActor (_ host: String, _ services: AppServices, _ onDismiss: @escaping () -> Void) -> AnyView) { bagManagerBuilder = build }
-    public func makeBagManager(host: String, services: AppServices, onDismiss: @escaping () -> Void) -> AnyView? {
-        bagManagerBuilder?(host, services, onDismiss)
-    }
-
-    public func registerReplayOpener(_ open: @escaping @MainActor (_ url: URL, _ services: AppServices) async -> Void) { replayOpener = open }
-    public func openReplay(url: URL, services: AppServices) async { await replayOpener?(url, services) }
-
-    public func registerReplayTimeProvider(_ provider: @escaping @MainActor () -> Double) { replayTimeProvider = provider }
-    public var currentBagTimeSec: Double { replayTimeProvider?() ?? 0 }
 
     // MARK: - Recording toolbar
 

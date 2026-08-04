@@ -31,8 +31,6 @@ let package = Package(
         .package(path: "../PublishService"),
         .package(path: "../PublishUI"),
         .package(path: "../TopicBrowserUI"),
-        .package(path: "../ServiceCallService"),
-        .package(path: "../ServiceCallUI"),
         .package(path: "../InspectorUI"),
         .package(path: "../Viewer3DUI"),
     ],
@@ -44,7 +42,7 @@ let package = Package(
                 "ConnectionManager", "ConnectionUI", "LayoutEngine", "ProfileStore",
                 "LogStore", "LogViewerUI", "MetalCore", "MeshLoader", "RobotModelCore",
                 "RobotModelLoader", "RobotModelRenderer", "URDFParser", "PublishService",
-                "PublishUI", "TopicBrowserUI", "ServiceCallService", "ServiceCallUI",
+                "PublishUI", "TopicBrowserUI",
                 "InspectorUI", "Viewer3DUI",
             ],
             swiftSettings: [
