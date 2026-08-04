@@ -4,17 +4,10 @@ import LogStore
 struct LogRowView: View {
     let entry: LogEntry
     let index: Int
-    let searchText: String
-    let regexEnabled: Bool
-    let caseSensitive: Bool
     let isExpanded: Bool
-    let isBookmarked: Bool
     let fontSize: Int
     let wrapLines: Bool
-    var onNodeTap: ((String) -> Void)?
-    var onSeverityTap: ((LogSeverity) -> Void)?
     var onToggleExpand: (() -> Void)?
-    var onToggleBookmark: (() -> Void)?
     var onCopy: (() -> Void)?
 
     var body: some View {
@@ -29,11 +22,6 @@ struct LogRowView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .background(index % 2 == 0 ? Color.clear : Color.white.opacity(0.02))
-        .background(
-            isBookmarked
-                ? Color.yellow.opacity(0.06)
-                : Color.clear
-        )
     }
 
     @ViewBuilder
@@ -58,61 +46,28 @@ struct LogRowView: View {
                 .frame(width: 92, alignment: .leading)
 
             // Severity badge
-            Button {
-                onSeverityTap?(entry.severity)
-            } label: {
-                Text(entry.severity.label)
-                    .font(.system(size: CGFloat(fontSize - 1)).monospaced().bold())
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(severityColor(entry.severity).opacity(0.25),
-                                in: RoundedRectangle(cornerRadius: 3))
-                    .foregroundStyle(severityColor(entry.severity))
-            }
-            .buttonStyle(.plain)
-            .help("Filter by \(entry.severity.label) — click to show only this severity")
+            Text(entry.severity.label)
+                .font(.system(size: CGFloat(fontSize - 1)).monospaced().bold())
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(severityColor(entry.severity).opacity(0.25),
+                            in: RoundedRectangle(cornerRadius: 3))
+                .foregroundStyle(severityColor(entry.severity))
 
             // Node name
-            Button {
-                onNodeTap?(entry.node)
-            } label: {
-                Text(entry.node)
-                    .font(.system(size: CGFloat(fontSize)).monospaced())
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(width: 130, alignment: .leading)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .help("Filter by node: \(entry.node)")
-            .cursorOnHover()
+            Text(entry.node)
+                .font(.system(size: CGFloat(fontSize)).monospaced())
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(width: 130, alignment: .leading)
+                .foregroundStyle(.primary)
 
             // Message
-            if searchText.isEmpty || regexEnabled {
-                Text(entry.message)
-                    .font(.system(size: CGFloat(fontSize)).monospaced())
-                    .lineLimit(wrapLines ? nil : 2)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                highlightedText(entry.message, search: searchText, caseSensitive: caseSensitive)
-                    .font(.system(size: CGFloat(fontSize)).monospaced())
-                    .lineLimit(wrapLines ? nil : 2)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            // Bookmark button
-            Button {
-                onToggleBookmark?()
-            } label: {
-                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isBookmarked ? .yellow : .secondary)
-                    .frame(width: 16)
-            }
-            .buttonStyle(.plain)
-            .help(isBookmarked ? "Remove bookmark" : "Bookmark this entry")
+            Text(entry.message)
+                .font(.system(size: CGFloat(fontSize)).monospaced())
+                .lineLimit(wrapLines ? nil : 2)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -166,22 +121,6 @@ struct LogRowView: View {
         }
     }
 
-    private func highlightedText(_ text: String, search: String, caseSensitive: Bool) -> Text {
-        let opts: String.CompareOptions = caseSensitive ? [] : .caseInsensitive
-        var remaining = text[...]
-        var result = Text("")
-        while let range = remaining.range(of: search, options: opts) {
-            if !remaining[remaining.startIndex..<range.lowerBound].isEmpty {
-                result = result + Text(remaining[remaining.startIndex..<range.lowerBound])
-            }
-            result = result + Text(remaining[range]).bold().foregroundColor(.yellow)
-            remaining = remaining[range.upperBound...]
-        }
-        if !remaining.isEmpty {
-            result = result + Text(remaining)
-        }
-        return result
-    }
 }
 
 #if canImport(AppKit)
