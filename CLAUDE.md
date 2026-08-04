@@ -68,3 +68,21 @@ inject them without the shell depending on any paid package:
 Each package has its own `CLAUDE.md` with module-specific conventions (wire protocol,
 render order, coordinate swizzle, subscription lifecycle, etc.). Read the nearest one when
 working inside a package.
+
+## CI/CD
+
+- **`.github/workflows/ci.yml`** — compile-check on every PR (macos-26 / Xcode 26.3).
+  `main` is a protected branch requiring this check + a PR (no direct pushes, even from
+  Actions, without repo-admin bypass).
+- **`.github/workflows/release.yml`** — on every push to `main`, reads
+  `CFBundleShortVersionString` from `app/project.yml`; if a GitHub Release for that
+  version doesn't exist yet, archives, signs with Developer ID, notarizes + staples,
+  and publishes it (the app's direct-download `.zip`, served via the website's
+  `/releases/latest/download` link). A merge that doesn't bump the version is a no-op
+  here — bump the version and merge to cut a release.
+- **Downstream notification (optional, generic by design):** after a successful
+  release, a step fires a `repository_dispatch` if `secrets.DOWNSTREAM_REPO` and
+  `secrets.DOWNSTREAM_DISPATCH_TOKEN` are configured — no-op otherwise. Deliberately
+  contains no downstream repo name, product name, or edition anywhere in this file;
+  this repo has no knowledge of, and must never be made to reference, anything
+  downstream of it.
