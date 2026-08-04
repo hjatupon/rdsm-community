@@ -112,6 +112,18 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application"
 
+      - name: Upload dSYMs
+        if: steps.gate.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          # The archive's dSYMs are otherwise discarded when this runner is torn
+          # down, which makes any future crash report from this build unsymbolicatable
+          # (only raw hex offsets, no function names). Keep them so `atos` can resolve
+          # a crash's app frames precisely instead of guessing from source review.
+          name: dSYMs-v${{ steps.gate.outputs.version }}
+          path: ${{ runner.temp }}/RDSMCommunity.xcarchive/dSYMs
+          retention-days: 180
+
       - name: Export with Developer ID
         if: steps.gate.outputs.should_release == 'true'
         env:

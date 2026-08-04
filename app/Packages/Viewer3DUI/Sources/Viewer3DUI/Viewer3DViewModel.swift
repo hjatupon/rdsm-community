@@ -161,6 +161,13 @@ public final class Viewer3DViewModel {
     }
 
     public func startSubscriptions(layers: [DisplayLayer]) async {
+        // Two call sites request this (initial GPU setup, and layer-list changes) and
+        // can race — e.g. on hardware where GPU setup is slow enough that a manual
+        // layer edit lands first. If the requested set already matches what's active,
+        // this is a redundant call: skip it rather than cancelling and immediately
+        // re-creating in-flight subscriptions for the same topics, which can corrupt
+        // Swift's task bookkeeping (observed as a swift_task_dealloc crash on Intel).
+        guard layers != activeLayers else { return }
         stopSubscriptions()
         pointCloudRenderer?.clearAllLayers()
         activeLayers = layers
