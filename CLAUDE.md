@@ -69,6 +69,32 @@ Each package has its own `CLAUDE.md` with module-specific conventions (wire prot
 render order, coordinate swizzle, subscription lifecycle, etc.). Read the nearest one when
 working inside a package.
 
+## Dev workflow — shipping a change (read this before starting work)
+
+Follow these steps in order for **any** change that should reach both Community and the
+paid Pro edition. Do not skip the version bump — without it nothing releases and Pro
+never finds out this change exists.
+
+1. Branch off `main`, implement, build/test locally (see "Build & run" above).
+2. Open a PR. `ci.yml` must pass (compile check) — `main` is protected, no direct pushes.
+3. Merge the PR. **This alone ships nothing.** `release.yml` only runs the actual
+   release when the merged `app/project.yml` also bumped
+   `CFBundleShortVersionString` — otherwise it's a silent no-op.
+4. When ready to actually release (can be the same PR, or a separate later one that
+   only bumps the version): bump `CFBundleShortVersionString` in `app/project.yml`
+   and merge. This triggers `release.yml`, which builds, signs, notarizes, and
+   publishes the new version — Community users get it immediately via the website's
+   download link.
+5. **From here, everything is automatic** — you do not need to do anything in the
+   Pro repo. The release step above fires a downstream notification; the Pro repo
+   picks it up, re-pins its dependency to this new version, rebuilds, and publishes
+   its own signed release. See Pro's `CLAUDE.md` for that half of the pipeline, and
+   its `ship-rdsm-pro` skill for the final App Store submission step.
+
+Batch small PRs without releasing (steps 1–3 only) until you're actually ready for
+both editions to receive the change — the version bump in step 4 is the deliberate
+"ship it now" trigger, not something to do reflexively on every merge.
+
 ## CI/CD
 
 - **`.github/workflows/ci.yml`** — compile-check on every PR (macos-26 / Xcode 26.3).
