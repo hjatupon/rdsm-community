@@ -90,7 +90,17 @@ public final class AppServices: ObservableObject {
     // MARK: - 3D viewer state (lifted from Viewer3DView for per-profile persistence)
 
     /// Layers currently shown in the 3D viewer. Persisted per profile.
-    @Published var viewer3DLayers: [DisplayLayer] = []
+    ///
+    /// Every write funnels through here, which is why `LayerAdmission` hooks the setter
+    /// rather than the six call sites that mutate it.
+    @Published var viewer3DLayers: [DisplayLayer] = [] {
+        didSet { applyLayerAdmission(previous: oldValue) }
+    }
+
+    /// What caused the write currently being committed. Reset to `.user` after each one,
+    /// so only a call that deliberately opts in is treated as a restore.
+    private var layerChangeSource: LayerChangeSource = .user
+    private var isApplyingLayerAdmission = false
 
     /// The profile ID whose config is currently loaded. Used to key saves.
     private var activeProfileID: String? = nil
@@ -155,6 +165,28 @@ public final class AppServices: ObservableObject {
             }
     }
 
+    // MARK: - Layer admission
+
+    /// Runs the installed `LayerAdmission.clamp` over a freshly committed layer list and
+    /// rewrites it if the policy returned something different.
+    private func applyLayerAdmission(previous: [DisplayLayer]) {
+        let source = layerChangeSource
+        layerChangeSource = .user
+        guard !isApplyingLayerAdmission, let clamp = LayerAdmission.clamp else { return }
+
+        let permitted = clamp(viewer3DLayers, previous, source)
+        guard permitted != viewer3DLayers else { return }
+        isApplyingLayerAdmission = true
+        viewer3DLayers = permitted
+        isApplyingLayerAdmission = false
+    }
+
+    /// Writes `layers` marked as a profile restore rather than a user gesture.
+    private func restoreViewer3DLayers(_ layers: [DisplayLayer]) {
+        layerChangeSource = .restore
+        viewer3DLayers = layers
+    }
+
     private func metalContext() -> MetalContext? {
         if let ctx = sharedMetalContext { return ctx }
         let ctx = try? MetalContext()
@@ -184,7 +216,7 @@ public final class AppServices: ObservableObject {
                 let profileID = "\(first.profile.name)|\(first.profile.url.absoluteString)"
                 activeProfileID = profileID
                 if let saved = Viewer3DProfileConfig.load(for: profileID) {
-                    viewer3DLayers = saved.layers
+                    restoreViewer3DLayers(saved.layers)
                     // Restore fixed frame from profile config only if not overridden globally.
                     if !saved.fixedFrame.isEmpty {
                         fixedFrame = saved.fixedFrame
