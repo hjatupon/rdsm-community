@@ -90,16 +90,6 @@ public struct AppRootScene: Scene {
                 Button("\(AppInfo.displayName) Documentation") {
                     NSWorkspace.shared.open(AppInfo.docsURL)
                 }
-                Button("Report an Issue") {
-                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=RDSM%20Issue") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                Button("Send Feedback") {
-                    if let url = URL(string: "mailto:jatupon.h@icloud.com?subject=RDSM%20Feedback") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
             }
 
         }

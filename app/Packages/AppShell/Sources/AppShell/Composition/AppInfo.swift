@@ -27,6 +27,4 @@ public enum AppInfo {
     /// Documentation site.
     public static let docsURL = URL(string: "https://rdsm.app/docs")!
 
-    /// Support contact address.
-    public static let supportEmail = "jatupon.h@icloud.com"
 }
